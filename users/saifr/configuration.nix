@@ -105,6 +105,8 @@
       xorg.fontmiscmisc      # The 9x15 font
       xorg.fontadobe100dpi   # Often needed for buttons
       xorg.fontadobe75dpi    # Often needed for labels
+      nerd-fonts.hack
+      nerd-fonts.jetbrains-mono
     ];
     
     # This is the "Magic Switch" that makes NixOS link these to X11

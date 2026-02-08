@@ -3,6 +3,9 @@
 let 
   erd-go = import ./erd-go.nix { inherit pkgs; };
   qwen-agent = import ./qwen-agent.nix { inherit pkgs; };
+
+  lua-utils-nvim = import ./lua-utils-nvim.nix { inherit pkgs; };
+  pathlib-nvim = import ./pathlib-nvim.nix { inherit pkgs; };
 in
 {
   # THIS MUST BE HERE AT THE TOP LEVEL
@@ -25,6 +28,7 @@ in
   };
 
   home.packages = with pkgs; [
+    vim
 
     sqlite
     graphviz
@@ -66,6 +70,7 @@ in
     file
     xorg.libXpm
     ghostty
+    kitty
 
     gnuplot
 
@@ -193,6 +198,7 @@ in
   programs.neovim = {
     enable = true;
 
+    extraLuaPackages = ps: [ ps.magick ]; # This is often required for image.nvim
     # This installs the Treesitter plugin AND the python/js parsers correctly compiled for NixOS
     plugins = with pkgs.vimPlugins; [
       (nvim-treesitter.withPlugins (p: [ 
@@ -204,17 +210,32 @@ in
         p.vimdoc 
         p.query 
 	p.sql
+        p.tree-sitter-norg
+        p.tree-sitter-norg-meta
       ]))
+
+      neorg
+      plenary-nvim
+      otter-nvim
+      telescope-nvim
+
+      lua-utils-nvim
+      pathlib-nvim
+      nui-nvim
+      nvim-nio
+      neorg-telescope
+      snacks-nvim
+      image-nvim
     ];
 
     # key line
     package = inputs.neovim-nightly-overlay.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
     viAlias = true;
-    vimAlias = true;
+    #vimAlias = true;
   };
 
   home.file.".config/i3/config".text = builtins.readFile ./i3-config;
   home.file.".config/libreoffice/4/user/registrymodifications.xcu".source = ./registrymodifications.xcu;
-  home.file.".tmux.conf".source = ./tmux.conf;
+  #home.file.".tmux.conf".source = ./tmux.conf;
 }
