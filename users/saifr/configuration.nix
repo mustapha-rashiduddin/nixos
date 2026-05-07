@@ -1,4 +1,4 @@
-{ config, pkgs, inputs, ... }:
+{ config, pkgs, pkgs-unstable, inputs, ... }:
 
 {
   # 1. Import Home Manager so we can use it below
@@ -31,6 +31,10 @@
     nssmdns4 = true;
     openFirewall = true;
   };
+  #services.ollama = {
+  #  enable = true;
+  #  package = pkgs-unstable.ollama;
+  #};
 
   # Maintenance
   nix.gc = {
@@ -150,7 +154,7 @@
     backupFileExtension = "backup";
     
     # Pass inputs so home.nix can see neovim-nightly
-    extraSpecialArgs = { inherit inputs; };
+    extraSpecialArgs = { inherit inputs pkgs-unstable; };
     
     # Point to the home.nix in this folder
     users.saifr = import ./home.nix;

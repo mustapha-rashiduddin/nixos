@@ -9,6 +9,11 @@ setopt no_list_ambiguous
 
 bindkey -v
 
+# --- ADD THESE LINES ---
+export KEYTIMEOUT=1                  # Reduces the Escape delay to 10ms (instant)
+bindkey -M viins '^[' vi-cmd-mode    # Explicitly maps Ctrl-[ / Esc to normal mode
+# -----------------------
+
 alias aud='/home/saifr/progs/audacity-linux-3.6.1-x64.AppImage'
 alias slidesetter="libreoffice --accept=\"socket,host=localhost,port=2002;urp;\""
 alias ls="ls -F"
@@ -36,9 +41,6 @@ zstyle ':completion:*' use-compctl false
 zstyle ':completion:*' verbose true
 zstyle ':completion:*:kill:*' command 'ps -u $USER -o pid,%cpu,tty,cputime,cmd'
 alias c="cd"
-
-# opam configuration
-[[ ! -r /home/saifr/.opam/opam-init/init.zsh ]] || source /home/saifr/.opam/opam-init/init.zsh  > /dev/null 2> /dev/null
 
 export ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer
 unsetopt BEEP
