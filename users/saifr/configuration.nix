@@ -17,7 +17,8 @@
 
   # Networking
   networking.networkmanager.enable = true;
-  
+  networking.enableIPv6 = false;
+
   # Audio
   security.rtkit.enable = true;
   services.pipewire = {
@@ -25,6 +26,11 @@
     alsa.enable = true;
     alsa.support32Bit = true;
     pulse.enable = true;
+  };
+  services.openvpn.servers.nordvpn = {
+    config = "config /home/saifr/vpn/dk244.ovpn";
+    authUserPass = "/etc/openvpn/creds";
+    autoStart = true;
   };
   services.avahi = {
     enable = true;
@@ -94,6 +100,12 @@
     windowManager.i3.enable = true;
   };
 
+  xdg.portal = {
+    enable = true;
+    extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
+    config.common.default = "*";
+  };
+
   # Aesthetics
   programs.dconf.enable = true;
   console = {
@@ -160,5 +172,11 @@
     users.saifr = import ./home.nix;
   };
 
+  # ================================================================
+  # VIRTUALISATION & CONTAINERS
+  # ================================================================
+  virtualisation.docker.enable = true;
+
+  services.openssh.enable = true;
   system.stateVersion = "25.11"; 
 }

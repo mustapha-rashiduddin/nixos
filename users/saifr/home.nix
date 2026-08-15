@@ -7,6 +7,18 @@ let
   #pathlib-nvim = import ./pathlib-nvim.nix { inherit pkgs; };
   #picoclaw = import ./picoclaw.nix { inherit pkgs pkgs-unstable; };
   #nanobot = import ./nanobot.nix { inherit pkgs; };   # <-- add this
+
+  fresh-ide = import ./fresh-ide.nix { inherit pkgs; }; # <--- ADD THIS HERE
+  webots = import ./webots.nix { inherit pkgs; }; # <--- ADD THIS
+  
+  nastaliqZip = pkgs.fetchurl {
+    url = "https://github.com/notofonts/nastaliq/releases/download/NotoNastaliqUrdu-v4.000/NotoNastaliqUrdu-v4.000.zip";
+    sha256 = "sha256-ByWnqd/UUJYbGCJ0RcyaXSFiTWix+I+lLkxqD+dXZyg=";
+  };
+  nastaliqFont = pkgs.runCommand "noto-nastaliq-urdu" {} ''
+    mkdir -p $out/share/fonts/truetype
+    ${pkgs.unzip}/bin/unzip ${nastaliqZip} -d $out/share/fonts/truetype
+  '';
 in
 {
   # THIS MUST BE HERE AT THE TOP LEVEL
@@ -25,27 +37,22 @@ in
   #};
 
   home.packages = with pkgs; [
-    #((vim-full.override {
-    #features = "tiny";
-    #guiSupport = false;
-    #luaSupport = false;
-    #pythonSupport = false;
-    #rubySupport = false;
-    #perlSupport = false;
-    #tclSupport = false;
-    #nlsSupport = false;
-    #}).overrideAttrs (oldAttrs: {
-    ## This deletes the bloated NixOS default vimrc after compilation!
-    #postInstall = (oldAttrs.postInstall or "") + ''
-    #  rm -f $out/share/vim/vimrc
-    #'';
-    #}))
-   wgnord
-   brave
+    wl-clipboard
+    fresh-ide
+    wgnord
+    openvpn
+    wireguard-tools
+    brave
+    vscode
+    discord
+    polkit_gnome
+    # xdg-desktop-portal
+    # xdg-desktop-portal-gtk
+    dunst
 
       ((vim-full.override {
-    features = "normal";
-    guiSupport = false;
+    features = "huge";
+    guiSupport = true;
     luaSupport = false;
     pythonSupport = false;
     rubySupport = false;
@@ -74,6 +81,7 @@ xclip # (Optional: for tiny copy/paste)
     #picoclaw
     kawkab-mono-font
     noto-fonts
+    helix
     emacs
     emacs-all-the-icons-fonts
     kdePackages.okular
@@ -110,11 +118,14 @@ xclip # (Optional: for tiny copy/paste)
     lldb
     mksh
     anki-bin
+    imagemagick
     obsidian
     pkgs-unstable.godot_4
+    pkgs-unstable.opencode 
     screenkey
     vlc
     scheherazade-new
+    nastaliqFont
     dbeaver-bin
     sqlite
     #graphviz
@@ -197,13 +208,16 @@ xclip # (Optional: for tiny copy/paste)
     xeyes
     file
     xorg.libXpm
-    #ghostty
+    ghostty
     mlterm
     gnuplot
     sage
     fricas
     gnome-calculator
+    jq
+    postman
     #pkgs-unstable.ollama
+    webots
 
     # THE PYTHON STACK
     (pkgs-unstable.python3.withPackages (ps: with ps; [
@@ -222,6 +236,7 @@ xclip # (Optional: for tiny copy/paste)
     #SHELL = "${pkgs.dash}/bin/dash";
     SHELL = "${pkgs.mksh}/bin/mksh";
     ENV = "$HOME/.mkshrc";
+    BROWSER = "google-chrome-stable"; 
   };
 
   # Generate the ~/.mkshrc file to enable vi bindings automatically
@@ -289,12 +304,35 @@ xclip # (Optional: for tiny copy/paste)
    size = 48; # Standard is 16/24. Try 48 or 64 for a big cursor.
   };
 
+  #gtk = {
+  #  enable = true;
+  #  font = {
+  #    name = "CMU Typewriter Text"; # Or any font you have installed
+  #    size = 18;            # Increase this for larger Emacs menus
+  #  };
+  #};
+  xresources.properties = {
+    "Emacs.pane.menubar.font" = "xft:CMU Typewriter Text:size=14";
+    "Emacs.menu*.font"        = "xft:CMU Typewriter Text:size=14";
+  };
+
 
   programs.google-chrome = {
     enable = true;
     commandLineArgs = [
       "--force-device-scale-factor=1.2" # 1.2 = 120% zoom.
     ];
+  };
+
+  xdg.mimeApps = {
+    enable = true;
+    defaultApplications = {
+      "text/html" = "google-chrome.desktop";
+      "x-scheme-handler/http" = "google-chrome.desktop";
+      "x-scheme-handler/https" = "google-chrome.desktop";
+      "x-scheme-handler/about" = "google-chrome.desktop";
+      "x-scheme-handler/unknown" = "google-chrome.desktop";
+    };
   };
 
   programs.jujutsu = {
@@ -377,6 +415,17 @@ xclip # (Optional: for tiny copy/paste)
     initContent = builtins.readFile ./extra_zsh_config.zsh;
   };
 
+  services.gammastep = {
+    enable = true;
+    provider = "manual";
+    latitude = 0.0;     
+    longitude = 0.0;
+    temperature = {
+      day = 2500;       
+      night = 2500;      
+    };
+  };
+
   programs.obs-studio = {
     enable = true;
     plugins = with pkgs.obs-studio-plugins; [
@@ -385,44 +434,10 @@ xclip # (Optional: for tiny copy/paste)
     ];
   };
 
-  #programs.neovim = {
-  #  enable = true;
-
-  #  extraLuaPackages = ps: [ ps.magick ]; # This is often required for image.nvim
-  #  # This installs the Treesitter plugin AND the python/js parsers correctly compiled for NixOS
-  #  plugins = with pkgs.vimPlugins; [
-  #    (nvim-treesitter.withPlugins (p: [ 
-  #      p.c 
-  #      p.lua 
-  #      p.python 
-  #      p.javascript 
-  #      p.vim 
-  #      p.vimdoc 
-  #      p.query 
-  #      p.sql
-  #      p.tree-sitter-norg
-  #      p.tree-sitter-norg-meta
-  #    ]))
-
-  #    neorg
-  #    plenary-nvim
-  #    otter-nvim
-  #    telescope-nvim
-
-  #    lua-utils-nvim
-  #    #pathlib-nvim
-  #    nui-nvim
-  #    nvim-nio
-  #    neorg-telescope
-  #    snacks-nvim
-  #    image-nvim
-  #  ];
-
-  #  # key line
-  #  package = inputs.neovim-nightly-overlay.packages.${pkgs.stdenv.hostPlatform.system}.default;
-
-  #  viAlias = true;
-  #};
+  programs.neovim = {
+    enable = true;
+    viAlias = true;
+  };
 
   home.file.".config/libreoffice/4/user/registrymodifications.xcu".source = ./registrymodifications.xcu;
 }
