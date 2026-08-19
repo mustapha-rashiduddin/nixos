@@ -308,6 +308,28 @@ xclip # (Optional: for tiny copy/paste)
     false
   '';
 
+  xdg.configFile."cosmic/com.system76.CosmicTheme.Dark/v1/corner_radii".text = ''
+    (
+      radius_0: (0.0, 0.0, 0.0, 0.0),
+      radius_xs: (0.0, 0.0, 0.0, 0.0),
+      radius_s: (0.0, 0.0, 0.0, 0.0),
+      radius_m: (0.0, 0.0, 0.0, 0.0),
+      radius_l: (0.0, 0.0, 0.0, 0.0),
+      radius_xl: (0.0, 0.0, 0.0, 0.0),
+    )
+  '';
+
+  xdg.configFile."cosmic/com.system76.CosmicTheme.Light/v1/corner_radii".text = ''
+    (
+      radius_0: (0.0, 0.0, 0.0, 0.0),
+      radius_xs: (0.0, 0.0, 0.0, 0.0),
+      radius_s: (0.0, 0.0, 0.0, 0.0),
+      radius_m: (0.0, 0.0, 0.0, 0.0),
+      radius_l: (0.0, 0.0, 0.0, 0.0),
+      radius_xl: (0.0, 0.0, 0.0, 0.0),
+    )
+  '';
+
   programs.tmux = {
 	  enable = true;
 # Completely disable the sensible plugin and default NixOS bloat
