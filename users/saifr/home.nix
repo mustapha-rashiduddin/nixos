@@ -265,6 +265,32 @@ xclip # (Optional: for tiny copy/paste)
     rclick_command=pavucontrol
   '';
 
+  xdg.configFile."fish/config.fish".text = ''
+    if status is-interactive
+        set -g fish_greeting ""
+    end
+  '';
+
+  xdg.configFile."cosmic/com.system76.CosmicTerm/v1/font_name".text = ''
+    "CMU Scheherazade Terminal"
+  '';
+
+  xdg.configFile."cosmic/com.system76.CosmicTerm/v1/font_weight".text = ''
+    600
+  '';
+
+  xdg.configFile."cosmic/com.system76.CosmicTerm/v1/dim_font_weight".text = ''
+    600
+  '';
+
+  xdg.configFile."cosmic/com.system76.CosmicTerm/v1/bold_font_weight".text = ''
+    700
+  '';
+
+  xdg.configFile."cosmic/com.system76.CosmicTerm/v1/show_headerbar".text = ''
+    false
+  '';
+
   programs.tmux = {
 	  enable = true;
 # Completely disable the sensible plugin and default NixOS bloat
