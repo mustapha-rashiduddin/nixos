@@ -2,70 +2,132 @@
 
 let
   pythonWithFontTools = pkgs.python3.withPackages (ps: [ ps.fonttools ]);
+  cosmicTerminalFontName = "CMU Amiri Terminal";
   scheherazadeScale = 1;
+  amiriScale = 1;
 
-  mergeTerminalFonts = pkgs.writeText "merge-cmu-scheherazade.py" ''
-    import os
+  mkCosmicTerminalFont = {
+    derivationName,
+    familyName,
+    filePrefix,
+    arabicFont,
+    arabicScale,
+  }:
+    let
+      mergeTerminalFonts = pkgs.writeText "merge-${derivationName}.py" ''
+        import os
 
-    import fontforge
-    import psMat
+        import fontforge
 
 
-    arabic = fontforge.open(os.environ["SCHEHERAZADE_FONT"])
-    arabic.em = 1000
-    arabic.selection.all()
-    arabic.transform(psMat.scale(float(os.environ["SCHEHERAZADE_SCALE"])))
+        temporary = os.environ["TMPDIR"]
+        faces = [
+            (os.environ["CMU_REGULAR"], "Regular"),
+            (os.environ["CMU_BOLD"], "SemiBold"),
+            (os.environ["CMU_BOLD"], "Bold"),
+        ]
 
-    scaled_arabic = os.path.join(os.environ["TMPDIR"], "scaled-arabic.ttf")
-    arabic.generate(scaled_arabic)
-    arabic.close()
+        for source, style in faces:
+            base = fontforge.open(source)
+            base.generate(os.path.join(temporary, f'cmu-{style}.ttf'))
+            base.close()
+      '';
+    in
+    # Embedding Arabic in the primary face makes its scale independent of fallback selection.
+    pkgs.runCommand derivationName {
+      nativeBuildInputs = [ pkgs.fontforge pythonWithFontTools ];
+      ARABIC_FONT = arabicFont;
+      ARABIC_SCALE = toString arabicScale;
+      FONT_FAMILY = familyName;
+      FILE_PREFIX = filePrefix;
+      CMU_REGULAR = "${pkgs.cm_unicode}/share/fonts/opentype/cmuntt.otf";
+      CMU_BOLD = "${pkgs.cm_unicode}/share/fonts/opentype/cmuntb.otf";
+    } ''
+      mkdir -p "$out/share/fonts/truetype"
+      export HOME="$TMPDIR"
 
-    faces = [
-        (os.environ["CMU_REGULAR"], "Regular", "Regular", 400),
-        (os.environ["CMU_BOLD"], "SemiBold", "Demi", 600),
-        (os.environ["CMU_BOLD"], "Bold", "Bold", 700),
-    ]
-    output = os.path.join(os.environ["out"], "share", "fonts", "truetype")
+      python -m fontTools.subset "$ARABIC_FONT" \
+        --output-file="$TMPDIR/arabic-subset.ttf" \
+        --unicodes='U+0600-06FF,U+0750-077F,U+0870-089F,U+08A0-08FF,U+FB50-FDFF,U+FE70-FEFF,U+10E60-10E7F,U+1EE00-1EEFF' \
+        --layout-features='*' \
+        --glyph-names
 
-    for source, style, fontforge_weight, numeric_weight in faces:
-        base = fontforge.open(source)
-        base.mergeFonts(scaled_arabic)
-        base.familyname = "CMU Scheherazade Terminal"
-        base.fontname = f"CMUScheherazadeTerminal-{style}"
-        base.fullname = f"CMU Scheherazade Terminal {style}"
-        base.weight = fontforge_weight
-        base.os2_weight = numeric_weight
-        base.generate(os.path.join(output, f"CMUScheherazadeTerminal-{style}.otf"))
-        base.close()
-  '';
+      python <<'PY'
+      import os
+      from fontTools.ttLib import TTFont
+      from fontTools.ttLib.scaleUpem import scale_upem
 
-  # Embedding Arabic in the primary face makes its scale independent of fallback selection.
-  cosmicTerminalFonts = pkgs.runCommand "cosmic-terminal-fonts" {
-    nativeBuildInputs = [ pkgs.fontforge pythonWithFontTools ];
-    SCHEHERAZADE_SCALE = toString scheherazadeScale;
-    SCHEHERAZADE_FONT = "${pkgs.scheherazade-new}/share/fonts/truetype/ScheherazadeNew-Regular.ttf";
-    CMU_REGULAR = "${pkgs.cm_unicode}/share/fonts/opentype/cmuntt.otf";
-    CMU_BOLD = "${pkgs.cm_unicode}/share/fonts/opentype/cmuntb.otf";
-  } ''
-    mkdir -p "$out/share/fonts/truetype"
-    export HOME="$TMPDIR"
+      font = TTFont(os.path.join(os.environ["TMPDIR"], "arabic-subset.ttf"))
+      scale_upem(font, round(1000 * float(os.environ["ARABIC_SCALE"])))
+      font["head"].unitsPerEm = 1000
+      font.save(os.path.join(os.environ["TMPDIR"], "scaled-arabic.ttf"))
+      PY
 
-    fontforge -lang=py -script ${mergeTerminalFonts}
+      fontforge -lang=py -script ${mergeTerminalFonts}
 
-    python <<'PY'
-    import glob
-    import os
-    from fontTools.ttLib import TTFont
+      merge_face() {
+        export STYLE="$1"
+        export WEIGHT="$2"
+        python <<'PY'
+      import os
+      from fontTools.merge import Merger
 
-    output = os.path.join(os.environ["out"], "share", "fonts", "truetype")
+      output = os.path.join(os.environ["out"], "share", "fonts", "truetype")
+      temporary = os.environ["TMPDIR"]
+      family = os.environ["FONT_FAMILY"]
+      prefix = os.environ["FILE_PREFIX"]
+      arabic = os.path.join(temporary, "scaled-arabic.ttf")
+      style = os.environ["STYLE"]
+      weight = int(os.environ["WEIGHT"])
 
-    for path in glob.glob(os.path.join(output, "CMUScheherazadeTerminal-*.otf")):
-        font = TTFont(path)
-        font["post"].isFixedPitch = 1
-        font["OS/2"].panose.bProportion = 9
-        font.save(path)
-    PY
-  '';
+      font = Merger().merge([os.path.join(temporary, f"cmu-{style}.ttf"), arabic])
+      font["post"].isFixedPitch = 1
+      font["OS/2"].panose.bProportion = 9
+      font["OS/2"].usWeightClass = weight
+
+      names = font["name"]
+      names.names = [
+          record
+          for record in names.names
+          if record.nameID not in {1, 2, 3, 4, 6, 16, 17, 21, 22}
+      ]
+      values = {
+          1: family,
+          2: style,
+          3: f"{family} {style}",
+          4: f"{family} {style}",
+          6: f"{prefix}-{style}",
+          16: family,
+          17: style,
+      }
+      for platform_id, encoding_id, language_id in [(3, 1, 0x409), (1, 0, 0)]:
+          for name_id, value in values.items():
+              names.setName(value, name_id, platform_id, encoding_id, language_id)
+
+      font.save(os.path.join(output, f"{prefix}-{style}.ttf"))
+      PY
+      }
+
+      merge_face Regular 400
+      merge_face SemiBold 600
+      merge_face Bold 700
+    '';
+
+  cmuScheherazadeTerminal = mkCosmicTerminalFont {
+    derivationName = "cmu-scheherazade-terminal";
+    familyName = "CMU Scheherazade Terminal";
+    filePrefix = "CMUScheherazadeTerminal";
+    arabicFont = "${pkgs.scheherazade-new}/share/fonts/truetype/ScheherazadeNew-Regular.ttf";
+    arabicScale = scheherazadeScale;
+  };
+
+  cmuAmiriTerminal = mkCosmicTerminalFont {
+    derivationName = "cmu-amiri-terminal";
+    familyName = "CMU Amiri Terminal";
+    filePrefix = "CMUAmiriTerminal";
+    arabicFont = "${pkgs.amiri}/share/fonts/truetype/Amiri-Regular.ttf";
+    arabicScale = amiriScale;
+  };
 in
 {
   # 1. Import Home Manager so we can use it below
@@ -164,17 +226,18 @@ in
     enable = true;
     xkb.layout = "us";
     xkb.variant = "";
-    displayManager.defaultSession = "none+i3";
-    
-    # Enable GDM (GNOME Display Manager) instead of LightDM
-    displayManager.gdm.enable = true;
-    
-    # Enable GNOME
-    desktopManager.gnome.enable = true;
-    
+
     # Keep i3 enabled so you can switch between them
     windowManager.i3.enable = true;
   };
+
+  services.displayManager.defaultSession = "none+i3";
+
+  # Enable GDM (GNOME Display Manager) instead of LightDM
+  services.displayManager.gdm.enable = true;
+
+  # Enable GNOME
+  services.desktopManager.gnome.enable = true;
 
   xdg.portal = {
     enable = true;
@@ -201,7 +264,8 @@ in
       nerd-fonts.jetbrains-mono
       kawkab-mono-font
       amiri
-      cosmicTerminalFonts
+      cmuAmiriTerminal
+      cmuScheherazadeTerminal
       vazir-code-font
     ];
     
@@ -215,7 +279,7 @@ in
       enable = true;
       defaultFonts = {
         monospace = [
-          "CMU Scheherazade Terminal"
+          cosmicTerminalFontName
           "DejaVu Sans Mono"
         ];
       };
@@ -256,7 +320,7 @@ in
     backupFileExtension = "backup";
     
     # Pass inputs so home.nix can see neovim-nightly
-    extraSpecialArgs = { inherit inputs pkgs-unstable; };
+    extraSpecialArgs = { inherit inputs pkgs-unstable cosmicTerminalFontName; };
     
     # Point to the home.nix in this folder
     users.saifr = import ./home.nix;

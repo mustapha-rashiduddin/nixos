@@ -1,4 +1,4 @@
-{ config, pkgs, pkgs-unstable, inputs, ... }:
+{ config, pkgs, pkgs-unstable, inputs, cosmicTerminalFontName, ... }:
 
 let 
   #erd-go = import ./erd-go.nix { inherit pkgs; };
@@ -268,12 +268,13 @@ xclip # (Optional: for tiny copy/paste)
   xdg.configFile."fish/config.fish".text = ''
     if status is-interactive
         set -g fish_greeting ""
+        fish_vi_key_bindings
+        alias vi="emacs -nw"
     end
   '';
 
-  xdg.configFile."cosmic/com.system76.CosmicTerm/v1/font_name".text = ''
-    "CMU Scheherazade Terminal"
-  '';
+  xdg.configFile."cosmic/com.system76.CosmicTerm/v1/font_name".text =
+    builtins.toJSON cosmicTerminalFontName + "\n";
 
   xdg.configFile."cosmic/com.system76.CosmicTerm/v1/font_weight".text = ''
     600
