@@ -80,6 +80,7 @@
           escape = "capslock";
           tab = "layer(meta)";
           enter = "layer(meta)";
+	  kpenter = "layer(meta)";
         };
         control = {
           j = "enter";
@@ -91,12 +92,20 @@
     };
   };
 
-  # Graphical Environment
+# Graphical Environment
   services.xserver = {
     enable = true;
     xkb.layout = "us";
     xkb.variant = "";
-    displayManager.lightdm.enable = true;
+    displayManager.defaultSession = "none+i3";
+    
+    # Enable GDM (GNOME Display Manager) instead of LightDM
+    displayManager.gdm.enable = true;
+    
+    # Enable GNOME
+    desktopManager.gnome.enable = true;
+    
+    # Keep i3 enabled so you can switch between them
     windowManager.i3.enable = true;
   };
 

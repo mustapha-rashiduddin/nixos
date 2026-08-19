@@ -49,6 +49,7 @@ in
     # xdg-desktop-portal
     # xdg-desktop-portal-gtk
     dunst
+    wesnoth
 
       ((vim-full.override {
     features = "huge";
@@ -183,9 +184,11 @@ xclip # (Optional: for tiny copy/paste)
     basedpyright
 
     #sqls
+    cosmic-term
     xdg-utils
     xwininfo
     slack
+    fish
     gedit
     nautilus
     dmenu
