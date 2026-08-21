@@ -184,6 +184,7 @@ xclip # (Optional: for tiny copy/paste)
     basedpyright
 
     #sqls
+    gh
     cosmic-term
     xdg-utils
     xwininfo
@@ -285,7 +286,6 @@ xclip # (Optional: for tiny copy/paste)
     if status is-interactive
         set -g fish_greeting ""
         fish_vi_key_bindings
-        alias vi="emacs -nw"
     end
   '';
 
