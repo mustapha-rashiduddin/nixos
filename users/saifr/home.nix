@@ -118,6 +118,9 @@ xclip # (Optional: for tiny copy/paste)
     #dash
     lldb
     mksh
+    (rust-bin.stable.latest.default.override {
+      extensions = [ "clippy" "rustfmt" "rust-src" ];
+    })
     anki-bin
     imagemagick
     obsidian
@@ -129,7 +132,7 @@ xclip # (Optional: for tiny copy/paste)
     nastaliqFont
     dbeaver-bin
     sqlite
-    #graphviz
+    graphviz
     #erd-go
     tbls
     #obs-studio
@@ -286,6 +289,7 @@ xclip # (Optional: for tiny copy/paste)
     if status is-interactive
         set -g fish_greeting ""
         fish_vi_key_bindings
+        alias erdcat /home/saifr/rnd/erdcat/target/release/erdcat
     end
   '';
 

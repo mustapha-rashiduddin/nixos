@@ -14,11 +14,11 @@ customRustPlatform.buildRustPackage rec {
   src = pkgs.fetchFromGitHub {
     owner = "sinelaw";
     repo = "fresh";
-    rev = "master";
-    hash = "sha256-iHmgrWWlVOgemFXdj2V0eNOgH4G5SUJYzkV68pumYZc="; 
+    rev = "a7dca75c04ebc57c99a9786051729b55fdd72a2f";
+    hash = "sha256-TrWsqoFvARUBoSLLm0mHdidIOCzNldBun8U7BsMUHVI=";
   };
 
-  cargoHash = "sha256-dHVyVbj/3GrAYZkCZTod+k7zdvUt100w+KpxfyIgWAs=";
+  cargoHash = "sha256-xmsgsSoJ8INa0BE6LpebBSBTXMmjGmqkCPmEZSxYDP0=";
 
   doCheck = false;
 }
