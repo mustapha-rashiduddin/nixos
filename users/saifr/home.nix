@@ -98,6 +98,11 @@ xclip # (Optional: for tiny copy/paste)
       postPatch = ''
         ${oldAttrs.postPatch or ""}
 
+	# Remove the Alt+Return fullscreen binding from the fullscreen patch.
+	# It collides with rainfrog's Alt+Enter query-execute keybinding.
+	# (F11 fullscreen binding is kept; i3 $mod+g also toggles fullscreen.)
+        sed -i '/XK_Return.*fullscreen/d' config.def.h
+
 # XXX experimenting
         # 1. Change the font to IBM VGA 8x16, enable antialiasing/autohinting for crisp pixels
         #sed -i 's/font = ".*"/font = "PxPlus IBM VGA 8x16:pixelsize=32:antialias=false:autohint=false"/' config.def.h
