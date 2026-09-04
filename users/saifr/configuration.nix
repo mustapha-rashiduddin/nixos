@@ -311,6 +311,11 @@ in
     htop
   ];
 
+  # Cargo-installed tools (notably `erd`) on PATH for EVERY shell. This is baked
+  # into the set-environment block that /etc/profile sources at login, so every
+  # login shell (zsh, mksh, fish, dash, bash) inherits it — no per-shell config.
+  environment.sessionVariables.PATH = [ "$HOME/.cargo/bin" ];
+
   # ================================================================
   # HOME MANAGER BRIDGE (The new part)
   # ================================================================

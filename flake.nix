@@ -7,6 +7,8 @@
 
     jujutsu.url = "github:martinvonz/jj"; # <--- ADD THIS
 
+    syntaqlite.url = "github:LalitMaganti/syntaqlite/v0.9.0";
+
     home-manager = {
       url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";

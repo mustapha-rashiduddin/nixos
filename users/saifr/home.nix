@@ -103,9 +103,6 @@ xclip # (Optional: for tiny copy/paste)
         #sed -i 's/font = ".*"/font = "PxPlus IBM VGA 8x16:pixelsize=32:antialias=false:autohint=false"/' config.def.h
         sed -i 's/font = ".*"/font = "AcPlus IBM VGA 8x16:pixelsize=32:antialias=true:autohint=false"/' config.def.h
 
-        # 2. INJECT C CODE: Force X11 to launch the window in fullscreen mode
-        sed -i '/XMapWindow(xw.dpy, xw.win);/i \    Atom netwmstate = XInternAtom(xw.dpy, "_NET_WM_STATE", False);\n    Atom netwmfullscreen = XInternAtom(xw.dpy, "_NET_WM_STATE_FULLSCREEN", False);\n    XChangeProperty(xw.dpy, xw.win, netwmstate, XA_ATOM, 32, PropModeReplace, (unsigned char *)&netwmfullscreen, 1);' x.c
-
 	# 3. DISABLE BOLD / FAKE-SMEARING IN C CODE:
         # Tell st to request the regular font even when a program asks for bold
         sed -i 's/FC_WEIGHT_BOLD/FC_WEIGHT_REGULAR/g' x.c
@@ -132,6 +129,7 @@ xclip # (Optional: for tiny copy/paste)
     nastaliqFont
     dbeaver-bin
     sqlite
+    inputs.syntaqlite.packages.${pkgs.stdenv.hostPlatform.system}.default
     graphviz
     #erd-go
     tbls
@@ -262,12 +260,26 @@ xclip # (Optional: for tiny copy/paste)
     BROWSER = "google-chrome-stable"; 
   };
 
-  # Generate the ~/.mkshrc file to enable vi bindings automatically
+  # Cargo-installed tools (`erd`) on PATH for the HM-managed shells (fish, zsh).
+  # HM sources this session-vars file unconditionally in config.fish / .zshrc,
+  # so it reaches non-login interactive shells that never run /etc/profile.
+  # (Login shells get the same path from configuration.nix
+  #  environment.sessionVariables.PATH; non-login mksh gets it from .mkshrc.)
+  home.sessionPath = [ "$HOME/.cargo/bin" ];
+
+  # Generate the ~/.mkshrc file to enable vi bindings automatically.
+  # mksh is interactive (non-login) via ENV=$HOME/.mkshrc, so it does NOT
+  # source /etc/profile. The system-level environment.sessionVariables.PATH
+  # (configuration.nix) only reaches login shells; this line covers routines
+  # started interactively (terminal + tmux), so `erd` resolves everywhere.
   home.file.".mkshrc".text = ''
     # Enable vi keybindings
     set -o vi
+    export PATH="$HOME/.cargo/bin:$PATH"
     alias cls="clear"
     alias ls="ls -F"
+    # ews - Emacs speed-dial workspace jump
+    . "$HOME/.config/ews/scripts/ews.sh"
   '';
 
   # This configures volumeicon to show a slider and use your mixer
@@ -285,13 +297,18 @@ xclip # (Optional: for tiny copy/paste)
     rclick_command=pavucontrol
   '';
 
-  xdg.configFile."fish/config.fish".text = ''
-    if status is-interactive
-        set -g fish_greeting ""
-        fish_vi_key_bindings
-        alias erdcat /home/saifr/rnd/erdcat/target/release/erdcat
-    end
-  '';
+  programs.fish = {
+    enable = true;
+
+    # PATH for cargo-installed tools (`erd`) comes from the system-level
+    # environment.sessionVariables.PATH in configuration.nix, so every shell
+    # inherits it at login. fish needs no explicit PATH line here.
+    interactiveShellInit = ''
+      set -g fish_greeting ""
+      fish_vi_key_bindings
+      source $HOME/.config/ews/scripts/ews.fish
+    '';
+  };
 
   xdg.configFile."cosmic/com.system76.CosmicTerm/v1/font_name".text =
     builtins.toJSON cosmicTerminalFontName + "\n";
