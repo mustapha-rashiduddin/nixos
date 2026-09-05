@@ -123,6 +123,8 @@ xclip # (Optional: for tiny copy/paste)
     (rust-bin.stable.latest.default.override {
       extensions = [ "clippy" "rustfmt" "rust-src" ];
     })
+    unzip
+    litecli
     anki-bin
     imagemagick
     obsidian
@@ -138,6 +140,7 @@ xclip # (Optional: for tiny copy/paste)
     graphviz
     #erd-go
     tbls
+    rainfrog
     #obs-studio
     #fd
     #xdotool
@@ -283,8 +286,10 @@ xclip # (Optional: for tiny copy/paste)
     export PATH="$HOME/.cargo/bin:$PATH"
     alias cls="clear"
     alias ls="ls -F"
-    # ews - Emacs speed-dial workspace jump
-    . "$HOME/.config/ews/scripts/ews.sh"
+    # esync - Emacs speed-dial workspace jump
+    . "$HOME/.config/esync/scripts/esync.sh"
+    # plant - plant current dir as the global speed-dial workspace
+    . "$HOME/.config/plant/scripts/plant.sh"
   '';
 
   # This configures volumeicon to show a slider and use your mixer
@@ -311,7 +316,8 @@ xclip # (Optional: for tiny copy/paste)
     interactiveShellInit = ''
       set -g fish_greeting ""
       fish_vi_key_bindings
-      source $HOME/.config/ews/scripts/ews.fish
+      source $HOME/.config/esync/scripts/esync.fish
+      source $HOME/.config/plant/scripts/plant.fish
     '';
   };
 
