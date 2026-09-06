@@ -30,9 +30,8 @@ in
   #  EDITOR = "nvim";
   #};
 
-  home.shellAliases = {
-    theme = "~/.config/config-manager/theme.sh";
-  };
+  # No theme aliases here: light/dark (and clight/cdark) are mksh-only,
+  # defined in the ~/.mkshrc block below.
 
   #programs.gemini-cli = {
   #  enable = true;
@@ -278,8 +277,12 @@ xclip # (Optional: for tiny copy/paste)
     . "$HOME/.config/plant/scripts/plant.sh"
     # lock - materialize and protect an i3 project loadout
     . "$HOME/.config/lock/scripts/lock.sh"
-    # theme - switch st/neovim between light and dark
-    alias theme="$HOME/.config/config-manager/theme.sh"
+    # theme - switch st/neovim between light and dark (mksh only)
+    alias light="$HOME/.config/config-manager/theme.sh light"
+    alias dark="$HOME/.config/config-manager/theme.sh dark"
+    # ghostty/cosmic theme (mksh only)
+    alias clight="$HOME/.config/config-manager/theme.sh clight"
+    alias cdark="$HOME/.config/config-manager/theme.sh cdark"
     # theme - apply persisted st colors on fresh st windows
     . "$HOME/.config/config-manager/st-theme-apply.sh"
   '';
