@@ -10,6 +10,8 @@ let
 
   fresh-ide = import ./fresh-ide.nix { inherit pkgs; }; # <--- ADD THIS HERE
   webots = import ./webots.nix { inherit pkgs; }; # <--- ADD THIS
+
+  litecli = import ./litecli.nix { inherit pkgs; };
   
   nastaliqZip = pkgs.fetchurl {
     url = "https://github.com/notofonts/nastaliq/releases/download/NotoNastaliqUrdu-v4.000/NotoNastaliqUrdu-v4.000.zip";
@@ -290,6 +292,12 @@ xclip # (Optional: for tiny copy/paste)
     . "$HOME/.config/esync/scripts/esync.sh"
     # plant - plant current dir as the global speed-dial workspace
     . "$HOME/.config/plant/scripts/plant.sh"
+    # lock - materialize and protect an i3 project loadout
+    . "$HOME/.config/lock/scripts/lock.sh"
+    # theme - switch st/neovim between light and dark
+    alias theme="$HOME/.config/config-manager/theme.sh"
+    # theme - apply persisted st colors on fresh st windows
+    . "$HOME/.config/config-manager/st-theme-apply.sh"
   '';
 
   # This configures volumeicon to show a slider and use your mixer
@@ -318,6 +326,7 @@ xclip # (Optional: for tiny copy/paste)
       fish_vi_key_bindings
       source $HOME/.config/esync/scripts/esync.fish
       source $HOME/.config/plant/scripts/plant.fish
+      source $HOME/.config/lock/scripts/lock.fish
     '';
   };
 
