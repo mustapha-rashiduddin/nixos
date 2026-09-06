@@ -275,8 +275,8 @@ xclip # (Optional: for tiny copy/paste)
     . "$HOME/.config/esync/scripts/esync.sh"
     # plant - plant current dir as the global speed-dial workspace
     . "$HOME/.config/plant/scripts/plant.sh"
-    # lock - materialize and protect an i3 project loadout
-    . "$HOME/.config/lock/scripts/lock.sh"
+    # load - materialize and protect an i3 project loadout (default: ./loadout)
+    . "$HOME/.config/load/scripts/load.sh"
     # theme - switch st/neovim between light and dark (mksh only)
     alias light="$HOME/.config/config-manager/theme.sh light"
     alias dark="$HOME/.config/config-manager/theme.sh dark"
@@ -322,7 +322,7 @@ xclip # (Optional: for tiny copy/paste)
       fish_vi_key_bindings
       source $HOME/.config/esync/scripts/esync.fish
       source $HOME/.config/plant/scripts/plant.fish
-      source $HOME/.config/lock/scripts/lock.fish
+      source $HOME/.config/load/scripts/load.fish
     '';
   };
 
