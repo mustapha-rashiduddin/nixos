@@ -283,8 +283,17 @@ xclip # (Optional: for tiny copy/paste)
     # ghostty/cosmic theme (mksh only)
     alias clight="$HOME/.config/config-manager/theme.sh clight"
     alias cdark="$HOME/.config/config-manager/theme.sh cdark"
-    # theme - apply persisted st colors on fresh st windows
-    . "$HOME/.config/config-manager/st-theme-apply.sh"
+    # theme - repaint st colors on every prompt (output-direction OSC, safe
+    # even right after an app like nvim/erdcat exits and owns the screen)
+    [ "$(ps -o comm= -p "$PPID" 2>/dev/null)" = "st" ] && IS_ST=1 || IS_ST=0
+    st_theme_osc() {
+        [ "$IS_ST" = 1 ] || return
+        fg=$(cat "$HOME/.config/config-manager/current-st-fg" 2>/dev/null) || return
+        bg=$(cat "$HOME/.config/config-manager/current-st-bg" 2>/dev/null) || return
+        [ -n "$fg" ] && [ -n "$bg" ] || return
+        command printf '\033]11;#%s\007\033]10;#%s\007\033]12;#%s\007' "$bg" "$fg" "$fg"
+    }
+    PS1='$(st_theme_osc)$ '
   '';
 
   # This configures volumeicon to show a slider and use your mixer
