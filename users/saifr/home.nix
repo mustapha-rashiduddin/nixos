@@ -245,22 +245,6 @@ xclip # (Optional: for tiny copy/paste)
       numpy
       pandas
     ]))
-
-    (writeShellScriptBin "dark" ''
-      mkdir -p ~/.config/cosmic/com.system76.CosmicTheme.Mode/v1
-      mkdir -p ~/.config/cosmic/com.system76.CosmicTerm/v1
-      echo -n true > ~/.config/cosmic/com.system76.CosmicTheme.Mode/v1/is_dark
-      echo 'Dark' > ~/.config/cosmic/com.system76.CosmicTerm/v1/app_theme
-      echo "Switched to dark mode"
-    '')
-
-    (writeShellScriptBin "light" ''
-      mkdir -p ~/.config/cosmic/com.system76.CosmicTheme.Mode/v1
-      mkdir -p ~/.config/cosmic/com.system76.CosmicTerm/v1
-      echo -n false > ~/.config/cosmic/com.system76.CosmicTheme.Mode/v1/is_dark
-      echo 'Light' > ~/.config/cosmic/com.system76.CosmicTerm/v1/app_theme
-      echo "Switched to light mode"
-    '')
   ];
   # This forces st (and your user environment) to default to dash
   home.sessionVariables = {
