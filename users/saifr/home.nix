@@ -105,9 +105,12 @@ xclip # (Optional: for tiny copy/paste)
         sed -i '/XK_Return.*fullscreen/d' config.def.h
 
 # XXX experimenting
-        # 1. Change the font to IBM VGA 8x16, enable antialiasing/autohinting for crisp pixels
+        # 1. Font: CMU Typewriter Text semi-bold, same family/weight as ghostty
+        #    (font-style = SemiBold) and emacs (my/font-typewriter). There is no
+        #    true SemiBold face, so weight=semibold resolves to the Bold face.
+        #    size 20pt == pixelsize 27 at ~97dpi, matching the frame default.
         #sed -i 's/font = ".*"/font = "PxPlus IBM VGA 8x16:pixelsize=32:antialias=false:autohint=false"/' config.def.h
-        sed -i 's/font = ".*"/font = "AcPlus IBM VGA 8x16:pixelsize=32:antialias=true:autohint=false"/' config.def.h
+        sed -i 's/font = ".*"/font = "CMU Typewriter Text:pixelsize=27:weight=semibold:antialias=true:autohint=false"/' config.def.h
 
 	# 3. DISABLE BOLD / FAKE-SMEARING IN C CODE:
         # Tell st to request the regular font even when a program asks for bold
