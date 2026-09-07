@@ -309,7 +309,8 @@ in
     usbutils 
     killall
     htop
-  ];
+    feh
+  ] ++ (with pkgs.nixos-artwork.wallpapers; [ simple-dark-gray ]);
 
   # Cargo-installed tools (notably `erd`) on PATH for EVERY shell. This is baked
   # into the set-environment block that /etc/profile sources at login, so every
