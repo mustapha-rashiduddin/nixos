@@ -280,13 +280,13 @@ xclip # (Optional: for tiny copy/paste)
     . "$HOME/.config/plant/scripts/plant.sh"
     # load - materialize and protect an i3 project loadout (default: ./loadout)
     . "$HOME/.config/load/scripts/load.sh"
-    # oa - run this loadout terminal's script (exported by loadout.py at
-    # launch as LOADOUT_SCRIPT / LOADOUT_CWD). `oa` executes the configured
+    # o - run this loadout terminal's script (exported by loadout.py at
+    # launch as LOADOUT_SCRIPT / LOADOUT_CWD). `o` executes the configured
     # script from the terminal's loadout path, so relative paths resolve
     # against the loadout directory regardless of where the shell has cd'd.
-    oa() {
+    o() {
         [ -n "$LOADOUT_SCRIPT" ] || {
-            echo 'oa: not a loadout script terminal' >&2
+            echo 'o: not a loadout script terminal' >&2
             return 1
         }
         [ -n "$LOADOUT_CWD" ] && [ -d "$LOADOUT_CWD" ] && cd "$LOADOUT_CWD"
