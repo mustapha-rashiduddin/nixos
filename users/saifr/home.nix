@@ -134,6 +134,7 @@ xclip # (Optional: for tiny copy/paste)
     obsidian
     pkgs-unstable.godot_4
     pkgs-unstable.opencode 
+    pkgs.aider-chat
     screenkey
     vlc
     scheherazade-new
