@@ -263,14 +263,15 @@ xclip # (Optional: for tiny copy/paste)
   #  environment.sessionVariables.PATH; non-login mksh gets it from .mkshrc.)
   home.sessionPath = [ "$HOME/.cargo/bin" ];
 
-  # Generate the ~/.mkshrc file to enable vi bindings automatically.
+  # Generate the ~/.mkshrc file (emacs editing, Ctrl+L clears the screen).
   # mksh is interactive (non-login) via ENV=$HOME/.mkshrc, so it does NOT
   # source /etc/profile. The system-level environment.sessionVariables.PATH
   # (configuration.nix) only reaches login shells; this line covers routines
   # started interactively (terminal + tmux), so `erd` resolves everywhere.
   home.file.".mkshrc".text = ''
-    # Enable vi keybindings
-    set -o vi
+    # Emacs editing mode is the default; it supports Ctrl+L = clear-screen
+    set -o emacs
+    bind '^L=clear-screen'
     export PATH="$HOME/.cargo/bin:$PATH"
     alias cls="clear"
     alias ls="ls -F"
