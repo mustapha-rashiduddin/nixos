@@ -172,6 +172,7 @@ xclip # (Optional: for tiny copy/paste)
     xdg-utils
     xwininfo
     slack
+    linphone
     fish
     gedit
     nautilus
