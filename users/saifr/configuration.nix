@@ -2,6 +2,7 @@
 
 let
   pythonWithFontTools = pkgs.python3.withPackages (ps: [ ps.fonttools ]);
+  check50 = import ../../pkgs/check50.nix { inherit pkgs; };
   cosmicTerminalFontName = "CMU Amiri Terminal";
   scheherazadeScale = 1;
   amiriScale = 1;
@@ -310,6 +311,7 @@ in
     killall
     htop
     feh
+    check50
   ] ++ (with pkgs.nixos-artwork.wallpapers; [ simple-dark-gray ]);
 
   # Cargo-installed tools (notably `erd`) on PATH for EVERY shell. This is baked
