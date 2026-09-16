@@ -11,6 +11,15 @@ pkgs.st.overrideAttrs (oldAttrs: {
     # config.def.h (Shortcut array) and st.h (function decls), so the stock
     # diff won't apply. This variant targets the post-fullscreen tree.
     ./st-scrollback.diff
+    (pkgs.fetchpatch {
+      url = "https://st.suckless.org/patches/scrollback/st-scrollback-mouse-0.9.2.diff";
+      hash = "sha256-CuNJ5FdKmAtEjwbgKeBKPJTdEfJvIdmeSAphbz0u3Uk=";
+    })
+    (pkgs.fetchpatch {
+      # Plain touchpad/wheel scrolls history outside alternate-screen apps.
+      url = "https://st.suckless.org/patches/scrollback/st-scrollback-mouse-altscreen-20220127-2c5edf2.diff";
+      hash = "sha256-8oVLgbsYCfMhNEOGadb5DFajdDKPxwgf3P/4vOXfUFo=";
+    })
   ];
 
   postPatch = ''
