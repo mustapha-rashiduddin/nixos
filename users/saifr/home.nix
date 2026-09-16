@@ -13,6 +13,16 @@ let
   st-custom = import ./st.nix { inherit pkgs; };
 
   litecli = import ./litecli.nix { inherit pkgs; };
+
+  oci-cli-latest = pkgs-unstable.oci-cli.overridePythonAttrs (_: {
+    version = "3.93.0";
+    src = pkgs.fetchFromGitHub {
+      owner = "oracle";
+      repo = "oci-cli";
+      tag = "v3.93.0";
+      hash = "sha256-6rky0IFRnkuCMN0ohjrQjiRUJ/zOSSXQG7HMZ2V516E=";
+    };
+  });
   
   nastaliqZip = pkgs.fetchurl {
     url = "https://github.com/notofonts/nastaliq/releases/download/NotoNastaliqUrdu-v4.000/NotoNastaliqUrdu-v4.000.zip";
@@ -103,6 +113,8 @@ xclip # (Optional: for tiny copy/paste)
     obsidian
     pkgs-unstable.godot_4
     pkgs-unstable.opencode 
+    pkgs-unstable.codex
+    oci-cli-latest
     pkgs.aider-chat
     screenkey
     vlc
@@ -165,6 +177,9 @@ xclip # (Optional: for tiny copy/paste)
     in pkgs.writeShellScriptBin "bashunit" "${bashunit-bin} \"$@\"")
 
     basedpyright
+
+    # check50 wrapper: guesses the problem slug from the current directory
+    (writeShellScriptBin "check50x" (builtins.readFile ./check50x.sh))
 
     #sqls
     gh

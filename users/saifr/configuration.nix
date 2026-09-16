@@ -209,7 +209,7 @@ in
           capslock = "layer(control)";
           escape = "capslock";
           tab = "layer(meta)";
-          enter = "layer(meta)";
+          #enter = "layer(meta)";
 	  kpenter = "layer(meta)";
         };
         control = {

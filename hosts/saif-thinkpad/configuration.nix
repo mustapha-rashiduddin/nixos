@@ -3,6 +3,9 @@
 {
   networking.hostName = "saif-thinkpad"; 
   services.printing.enable = true;
+  services.udev.extraRules = ''
+    KERNEL=="leds/tpacpi::power", MODE="0660", GROUP="wheel"
+  '';
 
   imports = [
     ./hardware-configuration.nix
