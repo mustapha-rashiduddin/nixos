@@ -6,7 +6,7 @@ pkgs.st.overrideAttrs (oldAttrs: {
       url = "https://st.suckless.org/patches/fullscreen/st-fullscreen-0.8.5.diff";
       hash = "sha256-52lO6K9TGrrdPljXAFo+JB39XHeNF+0ru5QzDJ+9GX8=";
     })
-# st-scrollback-0.9.2.diff (st.suckless.org) reconciled against the
+    # st-scrollback-0.9.2.diff (st.suckless.org) reconciled against the
     # fullscreen patch above: both insert lines into the same spots in
     # config.def.h (Shortcut array) and st.h (function decls), so the stock
     # diff won't apply. This variant targets the post-fullscreen tree.
@@ -20,6 +20,7 @@ pkgs.st.overrideAttrs (oldAttrs: {
       url = "https://st.suckless.org/patches/scrollback/st-scrollback-mouse-altscreen-20220127-2c5edf2.diff";
       hash = "sha256-8oVLgbsYCfMhNEOGadb5DFajdDKPxwgf3P/4vOXfUFo=";
     })
+    ./st-selection-autoscroll.diff
   ];
 
   postPatch = ''

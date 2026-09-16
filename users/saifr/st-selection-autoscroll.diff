@@ -1,0 +1,144 @@
+diff -ruN '--exclude=.git' st-autoscroll-base/st.c st-src/st.c
+--- st-autoscroll-base/st.c	2026-09-16 16:55:08.387681099 +0500
++++ st-src/st.c	2026-09-16 16:55:50.124540784 +0500
+@@ -1166,6 +1166,12 @@
+ {
+ 	if (sel.ob.x == -1 || sel.alt != IS_SET(MODE_ALTSCREEN))
+ 		return;
++	if (sel.mode != SEL_IDLE) {
++		sel.ob.y += n;
++		sel.oe.y += n;
++		selnormalize();
++		return;
++	}
+ 
+ 	if (BETWEEN(sel.nb.y, orig, term.bot) != BETWEEN(sel.ne.y, orig, term.bot)) {
+ 		selclear();
+diff -ruN '--exclude=.git' st-autoscroll-base/x.c st-src/x.c
+--- st-autoscroll-base/x.c	2026-09-16 16:55:08.389373067 +0500
++++ st-src/x.c	2026-09-16 16:56:59.250080079 +0500
+@@ -73,6 +73,7 @@
+ #define TRUERED(x)		(((x) & 0xff0000) >> 8)
+ #define TRUEGREEN(x)		(((x) & 0xff00))
+ #define TRUEBLUE(x)		(((x) & 0xff) << 8)
++#define SELAUTOSCROLL_INTERVAL 50
+ 
+ typedef XftDraw *Draw;
+ typedef XftColor Color;
+@@ -184,6 +185,8 @@
+ static void selrequest(XEvent *);
+ static void setsel(char *, Time);
+ static void mousesel(XEvent *, int);
++static int selautoscroll(struct timespec);
++static void selautoscrollupdate(XEvent *);
+ static void mousereport(XEvent *);
+ static char *kmap(KeySym, uint);
+ static int match(uint, uint);
+@@ -255,6 +258,9 @@
+ static char *opt_title = NULL;
+ 
+ static uint buttons; /* bit field of pressed buttons */
++static int selautoscrolldir;
++static XEvent selautoscrollevent;
++static struct timespec selautoscrolllast;
+ 
+ void
+ clipcopy(const Arg *dummy)
+@@ -363,6 +369,44 @@
+ 		setsel(getsel(), e->xbutton.time);
+ }
+ 
++static void
++selautoscrollupdate(XEvent *e)
++{
++	int dir = 0;
++
++	if ((buttons & 1) && !tisaltscr()) {
++		if (e->xmotion.y <= borderpx)
++			dir = 1;
++		else if (e->xmotion.y >= borderpx + win.th - 1)
++			dir = -1;
++	}
++
++	selautoscrollevent = *e;
++	if (dir != selautoscrolldir) {
++		selautoscrolldir = dir;
++		selautoscrolllast = (struct timespec){0};
++	}
++}
++
++static int
++selautoscroll(struct timespec now)
++{
++	Arg arg = {.i = 1};
++
++	if (!selautoscrolldir ||
++	    ((selautoscrolllast.tv_sec || selautoscrolllast.tv_nsec) &&
++	     TIMEDIFF(now, selautoscrolllast) < SELAUTOSCROLL_INTERVAL))
++		return 0;
++
++	if (selautoscrolldir > 0)
++		kscrollup(&arg);
++	else
++		kscrolldown(&arg);
++	mousesel(&selautoscrollevent, 0);
++	selautoscrolllast = now;
++	return 1;
++}
++
+ void
+ mousereport(XEvent *e)
+ {
+@@ -477,6 +521,8 @@
+ 
+ 	if (1 <= btn && btn <= 11)
+ 		buttons |= 1 << (btn-1);
++	if (btn == Button1)
++		selautoscrolldir = 0;
+ 
+ 	if (IS_SET(MODE_MOUSE) && !(e->xbutton.state & forcemousemod)) {
+ 		mousereport(e);
+@@ -704,6 +750,8 @@
+ 
+ 	if (1 <= btn && btn <= 11)
+ 		buttons &= ~(1 << (btn-1));
++	if (btn == Button1)
++		selautoscrolldir = 0;
+ 
+ 	if (IS_SET(MODE_MOUSE) && !(e->xbutton.state & forcemousemod)) {
+ 		mousereport(e);
+@@ -725,6 +773,7 @@
+ 	}
+ 
+ 	mousesel(e, 0);
++	selautoscrollupdate(e);
+ }
+ 
+ void
+@@ -1814,6 +1863,7 @@
+ 		if (xw.ime.xic)
+ 			XUnsetICFocus(xw.ime.xic);
+ 		win.mode &= ~MODE_FOCUSED;
++		selautoscrolldir = 0;
+ 		if (IS_SET(MODE_FOCUS))
+ 			ttywrite("\033[O", 3, 0);
+ 	}
+@@ -1980,6 +2030,9 @@
+ 
+ 		if (XPending(xw.dpy))
+ 			timeout = 0;  /* existing events might not set xfd */
++		if (selautoscrolldir &&
++		    (timeout < 0 || timeout > SELAUTOSCROLL_INTERVAL))
++			timeout = SELAUTOSCROLL_INTERVAL;
+ 
+ 		seltv.tv_sec = timeout / 1E3;
+ 		seltv.tv_nsec = 1E6 * (timeout - 1E3 * seltv.tv_sec);
+@@ -2004,6 +2057,8 @@
+ 			if (handler[ev.type])
+ 				(handler[ev.type])(&ev);
+ 		}
++		if (selautoscroll(now))
++			xev = 1;
+ 
+ 		/*
+ 		 * To reduce flicker and tearing, when new content or event
