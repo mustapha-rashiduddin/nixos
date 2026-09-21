@@ -49,6 +49,11 @@ in
   #};
 
   home.packages = with pkgs; [
+    (pkgs-unstable.coq_9_2.withPackages (ps: [
+      ps.stdlib
+      ps.stdpp
+    ]))
+
     wl-clipboard
     fresh-ide
     wgnord
