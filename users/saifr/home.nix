@@ -1,6 +1,23 @@
 { config, pkgs, pkgs-unstable, inputs, cosmicTerminalFontName, ... }:
 
 let 
+  rocq = pkgs-unstable.coq_9_2;
+  rocqPackages = rocq.rocqPackages;
+  rocq-lsp = (rocqPackages.callPackage (pkgs-unstable.path + "/pkgs/development/coq-modules/coq-lsp") {
+    mkCoqDerivation = rocqPackages.mkRocqDerivation;
+    coq = rocq;
+    serapi = null;
+    version = "dev";
+  }).overrideAttrs (_: {
+    name = "coq-lsp-0.2.5+9.2-dev";
+    src = pkgs-unstable.fetchFromGitHub {
+      owner = "rocq-community";
+      repo = "rocq-lsp";
+      rev = "f49d7b391c8dc6599a00d126d7bfedc9efbdc2e7";
+      hash = "sha256-VJLe7zNcvbUN0QsA/cKuhyr6kHKGWDf9Wp8uFhHQGvw=";
+    };
+  });
+
   #erd-go = import ./erd-go.nix { inherit pkgs; };
   #qwen-agent = import ./qwen-agent.nix { inherit pkgs; };
   #lua-utils-nvim = import ./lua-utils-nvim.nix { inherit pkgs; };
@@ -49,9 +66,10 @@ in
   #};
 
   home.packages = with pkgs; [
-    (pkgs-unstable.coq_9_2.withPackages (ps: [
+    (rocq.withPackages (ps: [
       ps.stdlib
       ps.stdpp
+      rocq-lsp
     ]))
 
     wl-clipboard
