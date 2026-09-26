@@ -93,27 +93,42 @@ pkgs.st.overrideAttrs (oldAttrs: {
     #                               exists, so cosmic-term never had it
     #                               changed, and zoom_adj is 0)
     #
-    # Amiri is dropped for CMU Typewriter Text. Two things to know:
+    # Amiri is dropped for CMU Typewriter Text. Size reasoning, measured off
+    # the font tables (upem 1000 for both):
     #
-    # 1. weight must be fontconfig's *named* constant, never a bare number.
-    #    fontconfig matches weight with getWeightDistance(), which only
-    #    knows the names in its internal weights[] table. Passing a numeric
-    #    "weight=600" makes that lookup walk off the end of the table, and
-    #    every family then resolves to its Bold face -- verified with
-    #    fc-match, weight=200..800 all land on Bold for DejaVu Sans Mono,
-    #    Liberation Mono and CMU Amiri Terminal alike. "weight=semibold"
-    #    is the spelling that actually selects SemiBold.
+    #   CMU Amiri Terminal   hhea asc+desc = 1.758 em, cap height 0.646 em
+    #   CMU Typewriter Text  hhea asc+desc = 1.096 em, cap height 0.611 em
     #
-    # 2. CMU Typewriter Text ships Light/Regular/Bold only (cm-unicode), no
-    #    SemiBold cut, so semibold resolves to Bold -- cmuntb.otf. That is
-    #    the closest face this family has to CMU Amiri Terminal's
-    #    SemiBold.ttf, and is the closest st can get without deviating from
-    #    the cosmic-term weight.
+    # fontconfig's built-in DPI is 75, not 96, so size=N pt gives an em of
+    # N*75/72 px. cosmic-term's font_size=14 on Amiri works out to a 14px em
+    # and a 9.04px cap height, so CMU Typewriter Text at size=14 (14.58px em,
+    # 8.91px cap) does land within 2% of cosmic-term's nominal size. That is
+    # still not what "bigger" looks like, and because Typewriter Text carries
+    # so much less asc+desc than Amiri its rows come out at 1.096 em against
+    # cosmic's hardcoded ceil(font_size * 1.4) = 20px, which reads cramped.
     #
-    # The old antialias=false:autohint=false came from the PxPlus bitmap
-    # font; dropped so this scalable OTF is hinted and antialiased the way
+    # size=17.5 gives an 18.23px em and an 11.14px cap height, 23% larger
+    # glyphs than cosmic-term, and its rows land on ceil(1.096 * 18.23) =
+    # 20px, which is cosmic-term's row height exactly. One number gets both.
+    #
+    # Tune it live before rebuilding: ctrl+shift+Prior / ctrl+shift+Next step
+    # the pixel size by 1, ctrl+shift+Home resets back to this value.
+    #
+    # weight must be fontconfig's *named* constant, never a bare number.
+    # fontconfig scores weight with getWeightDistance(), which only knows the
+    # names in its internal weights[] table, so "weight=600" runs that lookup
+    # off the end of the table. fc-match confirms weight=200..800 all resolve
+    # to Bold for every family tried, CMU Amiri Terminal included, even though
+    # it does ship a real SemiBold. "weight=semibold" is the spelling that
+    # actually selects SemiBold. CMU Typewriter Text has no SemiBold cut
+    # (Light/Regular/Bold only) so it lands on Bold, cmuntb.otf, the closest
+    # face to CMU Amiri Terminal's SemiBold.ttf.
+    #
+    # antialias=false:autohint=false came with the old PxPlus bitmap font and
+    # is dropped, so this scalable OTF is hinted and antialiased the way
     # cosmic-term's swash rasterizer renders it.
-    sed -i 's/font = ".*"/font = "CMU Typewriter Text:size=14:weight=semibold"/' config.def.h
+    sed -i 's/font = ".*"/font = "CMU Typewriter Text:size=17.5:weight=semibold"/' config.def.h
+    grep -q 'font = "CMU Typewriter Text:size=17.5:weight=semibold"' config.def.h
 
     # dc.bfont and dc.ibfont keep stock FC_WEIGHT_BOLD, which is the 700
     # that cosmic-term's bold_font_weight = 700 asks for. The previous
