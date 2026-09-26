@@ -1,11 +1,11 @@
 { config, pkgs, pkgs-unstable, inputs, cosmicTerminalFontName, ... }:
 
 let 
-  rocq = pkgs-unstable.coq_9_2;
-  rocqPackages = rocq.rocqPackages;
-  rocq-lsp = (rocqPackages.callPackage (pkgs-unstable.path + "/pkgs/development/coq-modules/coq-lsp") {
+  rocqPackages = pkgs-unstable.rocqPackages_9_2;
+  rocq = rocqPackages.rocq-core;
+  rocq-lsp = (rocqPackages.callPackage (pkgs-unstable.path + "/pkgs/development/rocq-modules/coq-lsp") {
     mkCoqDerivation = rocqPackages.mkRocqDerivation;
-    coq = rocq;
+    coq = rocqPackages.coq;
     serapi = null;
     version = "dev";
   }).overrideAttrs (_: {
