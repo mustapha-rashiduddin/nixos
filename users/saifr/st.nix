@@ -82,11 +82,45 @@ pkgs.st.overrideAttrs (oldAttrs: {
     # (F11 fullscreen binding is kept; i3 $mod+g also toggles fullscreen.)
     sed -i '/XK_Return.*fullscreen/d' config.def.h
 
-    # Font: PxPlus IBM VGA 8x16 bitmap font
-    sed -i 's/font = ".*"/font = "PxPlus IBM VGA 8x16:pixelsize=32:antialias=false:autohint=false"/' config.def.h
+    # Font: st's "COSMIC Terminal" font, i.e. whatever
+    # ~/.config/cosmic/com.system76.CosmicTerm/v1 currently holds.
+    #
+    #   font_name         = "CMU Amiri Terminal"
+    #   font_weight       = 600   (SemiBold)
+    #   bold_font_weight  = 700
+    #   dim_font_weight   = 600
+    #   font_size         = 14    (config.rs default; no font_size file
+    #                               exists, so cosmic-term never had it
+    #                               changed, and zoom_adj is 0)
+    #
+    # Amiri is dropped for CMU Typewriter Text. Two things to know:
+    #
+    # 1. weight must be fontconfig's *named* constant, never a bare number.
+    #    fontconfig matches weight with getWeightDistance(), which only
+    #    knows the names in its internal weights[] table. Passing a numeric
+    #    "weight=600" makes that lookup walk off the end of the table, and
+    #    every family then resolves to its Bold face -- verified with
+    #    fc-match, weight=200..800 all land on Bold for DejaVu Sans Mono,
+    #    Liberation Mono and CMU Amiri Terminal alike. "weight=semibold"
+    #    is the spelling that actually selects SemiBold.
+    #
+    # 2. CMU Typewriter Text ships Light/Regular/Bold only (cm-unicode), no
+    #    SemiBold cut, so semibold resolves to Bold -- cmuntb.otf. That is
+    #    the closest face this family has to CMU Amiri Terminal's
+    #    SemiBold.ttf, and is the closest st can get without deviating from
+    #    the cosmic-term weight.
+    #
+    # The old antialias=false:autohint=false came from the PxPlus bitmap
+    # font; dropped so this scalable OTF is hinted and antialiased the way
+    # cosmic-term's swash rasterizer renders it.
+    sed -i 's/font = ".*"/font = "CMU Typewriter Text:size=14:weight=semibold"/' config.def.h
 
-    # Disable bold / fake-smearing in C code
-    sed -i 's/FC_WEIGHT_BOLD/FC_WEIGHT_REGULAR/g' x.c
+    # dc.bfont and dc.ibfont keep stock FC_WEIGHT_BOLD, which is the 700
+    # that cosmic-term's bold_font_weight = 700 asks for. The previous
+    # FC_WEIGHT_BOLD -> FC_WEIGHT_REGULAR sed existed to kill fake-bold on
+    # top of a Regular face; with the regular face now resolving to Bold it
+    # would invert things and render bold text *lighter* than normal text.
+    # (dim_font_weight = 600 has no st equivalent: st has no ATTR_DIM.)
 
     # Color scheme: COSMIC Terminal's "COSMIC Dark" set, spliced in as a whole
     # so the positional colorname[] entries get replaced for real.
