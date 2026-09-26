@@ -1,5 +1,49 @@
 { pkgs }:
 
+# COSMIC Terminal's built-in "COSMIC Dark" color set, taken from cosmic_dark()
+# in cosmic-term 1.0.0 (src/terminal_theme.rs). This is what cosmic-term
+# actually renders here: its config sets app_theme = "Dark" and defines no
+# custom color_schemes_dark, so the builtin Dark scheme is the one in effect.
+#
+# cosmic_dark() deliberately leaves NamedColor::Background unset, so the
+# background comes from the COSMIC theme instead: main.rs copies
+# theme.cosmic().background.base into terminal::WINDOW_BG_COLOR, and for the
+# Dark theme that base is the palette's gray_1, #1b1b1b. Foreground and Cursor
+# are both set to BrightWhite.
+let
+  ansi = [
+    "#1b1b1b" "#f16161" "#7cb987" "#ddc74c" "#6296be" "#be6dee" "#49bac8" "#bebebe"
+    "#808080" "#ff8985" "#97d5a0" "#fae365" "#7db1da" "#d68eff" "#49bac8" "#c4c4c4"
+  ];
+  cursor = "#c4c4c4";
+  reverseCursor = "#555555";
+  defaultFg = "#c4c4c4";
+  defaultBg = "#1b1b1b";
+
+  # st's colorname[] is a flat positional array: 0-15 hold the ANSI colors and
+  # 256-259 back defaultcs/defaultrcs/defaultfg/defaultbg. Rewriting the whole
+  # block (rather than sed-ing entries one at a time) is what makes this
+  # actually take effect: those 16 entries are positional string literals, not
+  # "[N] = \"...\"" designated initializers, so per-color seds never matched.
+  # Leaving st's stock defaultcs=256 / defaultfg=258 / defaultbg=259 in place
+  # then resolves the cursor, foreground and background to exactly the values
+  # cosmic-term uses.
+  colorname = pkgs.lib.concatStringsSep "\n" (
+    [ "static const char *colorname[] = {" ]
+    ++ map (c: "  \"${c}\",") ansi
+    ++ [
+      ""
+      "  [255] = 0,"
+      ""
+      "  /* more colors can be added after 255 to use with DefaultXX */"
+      "  \"${cursor}\","
+      "  \"${reverseCursor}\","
+      "  \"${defaultFg}\", /* default foreground colour */"
+      "  \"${defaultBg}\", /* default background colour */"
+      "};"
+    ]
+  );
+in
 pkgs.st.overrideAttrs (oldAttrs: {
   patches = (oldAttrs.patches or []) ++ [
     (pkgs.fetchpatch {
@@ -44,26 +88,23 @@ pkgs.st.overrideAttrs (oldAttrs: {
     # Disable bold / fake-smearing in C code
     sed -i 's/FC_WEIGHT_BOLD/FC_WEIGHT_REGULAR/g' x.c
 
-    # High-contrast color scheme (Gruvbox-inspired, brighter than defaults)
-    sed -i 's/static const unsigned int defaultfg = .*/static const unsigned int defaultfg = 7;/' config.def.h
-    sed -i 's/static const unsigned int defaultbg = .*/static const unsigned int defaultbg = 0;/' config.def.h
-    sed -i 's/static const unsigned int defaultcs = .*/static const unsigned int defaultcs = 258;/' config.def.h
-
-    sed -i 's/\[0\] = "#[0-9a-fA-F]*"/[0] = "#282828"/' config.def.h
-    sed -i 's/\[1\] = "#[0-9a-fA-F]*"/[1] = "#cc241d"/' config.def.h
-    sed -i 's/\[2\] = "#[0-9a-fA-F]*"/[2] = "#98971a"/' config.def.h
-    sed -i 's/\[3\] = "#[0-9a-fA-F]*"/[3] = "#d79921"/' config.def.h
-    sed -i 's/\[4\] = "#[0-9a-fA-F]*"/[4] = "#458588"/' config.def.h
-    sed -i 's/\[5\] = "#[0-9a-fA-F]*"/[5] = "#b16286"/' config.def.h
-    sed -i 's/\[6\] = "#[0-9a-fA-F]*"/[6] = "#689d6a"/' config.def.h
-    sed -i 's/\[7\] = "#[0-9a-fA-F]*"/[7] = "#a89984"/' config.def.h
-    sed -i 's/\[8\] = "#[0-9a-fA-F]*"/[8] = "#928374"/' config.def.h
-    sed -i 's/\[9\] = "#[0-9a-fA-F]*"/[9] = "#fb4934"/' config.def.h
-    sed -i 's/\[10\] = "#[0-9a-fA-F]*"/[10] = "#b8bb26"/' config.def.h
-    sed -i 's/\[11\] = "#[0-9a-fA-F]*"/[11] = "#fabd2f"/' config.def.h
-    sed -i 's/\[12\] = "#[0-9a-fA-F]*"/[12] = "#83a598"/' config.def.h
-    sed -i 's/\[13\] = "#[0-9a-fA-F]*"/[13] = "#d3869b"/' config.def.h
-    sed -i 's/\[14\] = "#[0-9a-fA-F]*"/[14] = "#8ec07c"/' config.def.h
-    sed -i 's/\[15\] = "#[0-9a-fA-F]*"/[15] = "#ebdbb2"/' config.def.h
+    # Color scheme: COSMIC Terminal's "COSMIC Dark" set, spliced in as a whole
+    # so the positional colorname[] entries get replaced for real.
+    cat > colorname.new <<'COLORNAME'
+${colorname}
+COLORNAME
+    awk '
+      /^static const char \*colorname\[\] = \{/ && !done {
+        while ((getline line < "colorname.new") > 0) print line
+        done = 1
+        skip = 1
+        next
+      }
+      skip && /^\};/ { skip = 0; next }
+      skip { next }
+      { print }
+    ' config.def.h > config.def.h.tmp
+    grep -qF -- "${builtins.head ansi}" config.def.h.tmp
+    mv config.def.h.tmp config.def.h
   '';
 })
