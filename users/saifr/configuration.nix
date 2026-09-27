@@ -130,29 +130,37 @@ let
     arabicScale = amiriScale;
   };
 
-  # CMU Typewriter Text, plus the handful of symbols OpenCode's TUI leans on.
+  # CMU Typewriter Text, plus every symbol and emoji cm-unicode is missing.
   #
-  # cm-unicode covers none of them, so st used to hand those cells to whatever
-  # fontconfig ranked next (DejaVu Sans, a *proportional* face). st advances
-  # every cell by the width of the primary font and clips each glyph run to
-  # that width, so a wider proportional fallback gets its sides cut off --
-  # which is why the gear, box, check, star and diamond all looked mangled.
+  # cm-unicode has none of the geometric marks, none of the Braille spinner
+  # frames and no emoji at all, so each of those cells used to fall through to
+  # whatever fontconfig ranked next. st advances a cell using the *primary*
+  # font and then clips the drawn run to that width, so a fallback with a
+  # different advance got its sides cut off -- which is why the gear, box,
+  # check, star and diamond all looked mangled.
   #
-  # No single installed monospace face fixes this: DejaVu Sans Mono has the
-  # five geometric marks but no Braille, and Unifont has all fifteen but draws
-  # U+2699 at 0.81em and U+2731 at 0.94em, far wider than CMU's 0.525em cell.
+  # Wide runes are the same bug with a second cause. st already implements
+  # double-width cells (ATTR_WIDE, driven by wcwidth), so an emoji is given two
+  # cells and clipped to 2*cw -- but no stock emoji font is built for that.
+  # Noto Color Emoji advances 1.270em against the 1.05em st actually grants it,
+  # and it is a 109px bitmap besides, so it is both guillotined and blurry.
   #
-  # So we build the variant: take CMU as the base and fold the symbols in from
-  # DejaVu Sans, scaling each outline down to fit CMU's cell, centring it, and
-  # forcing its advance to CMU's own 525/1000em. Every glyph CMU already ships
-  # is left byte-for-byte alone, so text still looks exactly as it did, and the
-  # symbols can never overflow into a neighbouring cell.
+  # So the font answers for the whole range itself, with real outlines: narrow
+  # glyphs fitted to CMU's 525/1000em cell, wide glyphs fitted to two of them.
+  # Nothing is left over for a fallback to mis-measure.
   #
-  # The donor is emitted as CFF to match cm-unicode's own flavour. That keeps
-  # Merger on its happy path and spares us the fontforge round-trip the
-  # Arabic merge above needs.
+  # Two donor sources. DejaVu Sans supplies the fifteen narrow symbols (cm-unicode
+  # has none, and it is the only installed face carrying all of them that can be
+  # scaled into the cell). Noto Emoji -- monochrome, 1400+ real outlines --
+  # supplies everything else.
+  #
+  # The emoji pass may only add codepoints the CMU base lacks, so box drawing,
+  # arrows and maths keep their original outlines byte for byte and existing
+  # text cannot shift. The donors are emitted as CFF to match cm-unicode's own
+  # flavour, sparing us the fontforge round-trip the Arabic merge needs.
   symbolTerminalPython = pkgs.writeText "build-cmu-symbol-terminal.py" ''
     import os
+    import unicodedata
 
     from fontTools.fontBuilder import FontBuilder
     from fontTools.merge import Merger
@@ -164,84 +172,91 @@ let
     from fontTools.pens.transformPen import TransformPen
     from fontTools.ttLib import TTFont
 
-    # OpenCode's TUI symbols, plus the frames of the Braille thinking spinner.
     GEOMETRIC = [0x2699, 0x25A3, 0x2713, 0x2731, 0x25C8]
     BRAILLE = [0x280B, 0x2819, 0x2839, 0x2838, 0x283C,
                0x2834, 0x2826, 0x2827, 0x2807, 0x280F]
     SYMBOLS = GEOMETRIC + BRAILLE
 
     UPEM = 1000
-    CELL = 525          # CMU Typewriter Text advance, 0.525em
+    CELL = 525
     CENTRE = CELL / 2.0
 
-    # (max ink width, max ink height, vertical centre) in font units. The
-    # geometric marks are sized like a capital; the Braille cells stay small
-    # and sit a touch lower, the way terminal spinners are drawn.
     FIT_GEOMETRIC = (450, 470, 300)
     FIT_BRAILLE = (340, 340, 262)
 
+    # Emoji are fitted per cell-count: a wide rune gets two cells of st's clip
+    # region, so it may be drawn twice as wide as a narrow one.
+    SIDE_BEARING = 45
+    FIT_EMOJI_NARROW = (CELL - 2 * SIDE_BEARING, 520, 290)
+    FIT_EMOJI_WIDE = (2 * CELL - 2 * SIDE_BEARING, 800, 300)
 
-    def build_donor(src_path, out_path):
-        """A 1000-upem CFF font holding just the symbols, already fitted to
-        CMU's cell."""
+
+    def cell_count(codepoint):
+        return 2 if unicodedata.east_asian_width(chr(codepoint)) in ("W", "F") else 1
+
+
+    def build_donor(src_path, out_path, specs, tag):
+        """A 1000-upem CFF font of glyphs already fitted to CMU's cell grid.
+
+        specs: iterable of (codepoint, max_w, max_h, centre_y, ncell).
+        """
         src = TTFont(src_path)
         src_glyphset = src.getGlyphSet()
         src_cmap = src.getBestCmap()
-        ratio = UPEM / src["head"].unitsPerEm
-
-        missing = [c for c in SYMBOLS if c not in src_cmap]
-        if missing:
-            raise SystemExit("donor %s lacks %s" % (
-                src_path, " ".join("U+%04X" % c for c in missing)))
 
         glyph_order = [".notdef"]
         charstrings = {".notdef": T2CharStringPen(0, None).getCharString()}
         metrics = {".notdef": (CELL, 0)}
         cmap = {}
+        skipped = 0
 
-        for codepoint in SYMBOLS:
+        for codepoint, max_w, max_h, centre_y, ncell in specs:
+            if codepoint not in src_cmap:
+                skipped += 1
+                continue
             name = "symU%04X" % codepoint
+            if name in charstrings:
+                continue
 
-            # Flatten any composite first; a charstring pen cannot resolve
-            # components of its own.
             outline = DecomposingRecordingPen(src_glyphset)
             src_glyphset[src_cmap[codepoint]].draw(outline)
 
-            # Measure in CMU's units, normalising the donor's upem as we go.
+            ratio = UPEM / src["head"].unitsPerEm
             probe = BoundsPen(src_glyphset)
             outline.replay(TransformPen(probe, Transform(ratio, 0, 0, ratio, 0, 0)))
+            if probe.bounds is None:
+                skipped += 1
+                continue
             x_min, y_min, x_max, y_max = probe.bounds
 
-            max_w, max_h, centre_y = (FIT_BRAILLE if codepoint in BRAILLE
-                                      else FIT_GEOMETRIC)
             w = x_max - x_min
             h = y_max - y_min
             if w <= 0 or h <= 0:
-                raise SystemExit("U+%04X has an empty outline" % codepoint)
+                skipped += 1
+                continue
             scale = min(max_w / w, max_h / h)
 
-            # Centre the fitted ink on the cell, then hold the advance at
-            # CMU's own width so the terminal grid cannot drift.
-            dx = CENTRE - (x_min + x_max) / 2.0 * scale
+            advance = CELL * ncell
+            dx = advance / 2.0 - (x_min + x_max) / 2.0 * scale
             dy = centre_y - (y_min + y_max) / 2.0 * scale
             fit = Transform(ratio * scale, 0, 0, ratio * scale, dx, dy)
 
-            charstring_pen = T2CharStringPen(0, None)
+            pen = T2CharStringPen(0, None)
             outline.replay(TransformPen(
-                Qu2CuPen(charstring_pen, 0.5, reverse_direction=True), fit))
+                Qu2CuPen(pen, 0.5, reverse_direction=True), fit))
 
             glyph_order.append(name)
-            charstrings[name] = charstring_pen.getCharString()
-            metrics[name] = (CELL, int(round(x_min * scale + dx)))
+            charstrings[name] = pen.getCharString()
+            metrics[name] = (advance, int(round(x_min * scale + dx)))
             cmap[codepoint] = name
 
         font = FontBuilder(UPEM, isTTF=False)
         font.setupGlyphOrder(glyph_order)
         font.setupCharacterMap(cmap)
         font.setupCFF(
-            "CMUSymbolTerminal-Donor",
-            {"FullName": "CMU Symbol Terminal Donor",
-             "FamilyName": "CMU Symbol Terminal Donor",
+            "CMUSymbolTerminal-Donor-" + tag,
+            {"FullName": "CMU Symbol Terminal Donor " + tag,
+             "FamilyName": "CMU Symbol Terminal Donor " + tag,
              "Weight": "Regular"},
             charstrings, {},
         )
@@ -249,22 +264,22 @@ let
         font.setupHorizontalHeader(ascent=827, descent=-233)
         font.setupOS2(sTypoAscender=827, sTypoDescender=-233, usWeightClass=400)
         font.setupNameTable({
-            "familyName": "CMU Symbol Terminal Donor",
+            "familyName": "CMU Symbol Terminal Donor " + tag,
             "styleName": "Regular",
-            "psName": "CMUSymbolTerminal-Donor",
+            "psName": "CMUSymbolTerminalDonor-" + tag,
         })
         font.setupPost()
         font.save(out_path)
+        return len(cmap), skipped
 
 
     def finish(font, family, style, weight, out_path):
-        # The donor already fixed every symbol's advance, but assert it here
-        # too: holding the cell width open is the whole point of this font.
-        hmtx = font["hmtx"]
         cmap = font.getBestCmap()
-        for codepoint in SYMBOLS:
-            name = cmap[codepoint]
-            hmtx.metrics[name] = (CELL, hmtx.metrics[name][1])
+        hmtx = font["hmtx"]
+        for codepoint, name in cmap.items():
+            if name.startswith("symU"):
+                hmtx.metrics[name] = (CELL * cell_count(codepoint),
+                                      hmtx.metrics[name][1])
 
         font["post"].isFixedPitch = 1
         font["OS/2"].panose.bProportion = 9
@@ -272,18 +287,12 @@ let
 
         names = font["name"]
         names.names = [
-            record
-            for record in names.names
-            if record.nameID not in {1, 2, 3, 4, 6, 16, 17, 21, 22}
+            r for r in names.names
+            if r.nameID not in {1, 2, 3, 4, 6, 16, 17, 21, 22}
         ]
         values = {
-            1: family,
-            2: style,
-            3: f"{family} {style}",
-            4: f"{family} {style}",
-            6: f"CMUSymbolTerminal-{style}",
-            16: family,
-            17: style,
+            1: family, 2: style, 3: f"{family} {style}", 4: f"{family} {style}",
+            6: f"CMUSymbolTerminal-{style}", 16: family, 17: style,
         }
         for platform_id, encoding_id, language_id in [(3, 1, 0x409), (1, 0, 0)]:
             for name_id, value in values.items():
@@ -298,15 +307,43 @@ let
     family = "CMU Symbol Terminal"
 
     jobs = [
-        ("Regular", "CMU_REGULAR", "DEJAVU_REGULAR", 400),
-        ("Bold", "CMU_BOLD", "DEJAVU_BOLD", 700),
+        ("Regular", "CMU_REGULAR", "DEJAVU_REGULAR", "EMOJI_REGULAR", 400),
+        ("Bold", "CMU_BOLD", "DEJAVU_BOLD", "EMOJI_BOLD", 700),
     ]
-    for style, base_var, donor_var, weight in jobs:
-        donor = os.path.join(temporary, f"donor-{style}.otf")
-        build_donor(os.environ[donor_var], donor)
-        merged = Merger().merge([os.environ[base_var], donor])
-        finish(merged, family, style, weight,
-               os.path.join(output, f"CMUSymbolTerminal-{style}.otf"))
+
+    for style, base_var, sym_var, emoji_var, weight in jobs:
+        base_path = os.environ[base_var]
+        base_cmap = set(TTFont(base_path, lazy=True).getBestCmap())
+
+        # Only codepoints the CMU base lacks may be added. Anything CMU already
+        # draws -- box drawing, arrows, maths -- keeps its original outline, so
+        # existing text cannot shift.
+        emoji_src = TTFont(os.environ[emoji_var], lazy=True)
+        emoji_cmap = emoji_src.getBestCmap()
+        specs = []
+        for codepoint in sorted(emoji_cmap):
+            if codepoint in base_cmap or codepoint in SYMBOLS:
+                continue
+            ncell = cell_count(codepoint)
+            max_w, max_h, centre_y = (FIT_EMOJI_WIDE if ncell == 2
+                                      else FIT_EMOJI_NARROW)
+            specs.append((codepoint, max_w, max_h, centre_y, ncell))
+
+        sym_donor = os.path.join(temporary, f"donor-sym-{style}.otf")
+        emoji_donor = os.path.join(temporary, f"donor-emoji-{style}.otf")
+        n_sym, _ = build_donor(
+            os.environ[sym_var], sym_donor,
+            [(c, *(FIT_BRAILLE if c in BRAILLE else FIT_GEOMETRIC), 1)
+             for c in SYMBOLS], "sym")
+        n_emoji, skipped = build_donor(
+            os.environ[emoji_var], emoji_donor, specs, "emoji")
+
+        merged = Merger().merge([base_path, sym_donor, emoji_donor])
+        out = os.path.join(output, f"CMUSymbolTerminal-{style}.otf")
+        finish(merged, family, style, weight, out)
+        print(f"{style}: +{n_sym} symbols, +{n_emoji} emoji "
+              f"({skipped} empty/duplicate), {len(merged.getBestCmap())} codepoints")
+
   '';
 
   cmuSymbolTerminal = pkgs.runCommand "cmu-symbol-terminal" {
@@ -315,6 +352,8 @@ let
     CMU_BOLD = "${pkgs.cm_unicode}/share/fonts/opentype/cmuntb.otf";
     DEJAVU_REGULAR = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf";
     DEJAVU_BOLD = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans-Bold.ttf";
+    EMOJI_REGULAR = "${pkgs.noto-fonts-monochrome-emoji}/share/fonts/noto/NotoEmoji.ttf";
+    EMOJI_BOLD = "${pkgs.noto-fonts-monochrome-emoji}/share/fonts/noto/NotoEmoji.ttf";
   } ''
     python ${symbolTerminalPython}
   '';
