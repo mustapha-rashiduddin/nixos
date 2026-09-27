@@ -33,6 +33,12 @@ let
 
   jev = import ./jev.nix { inherit pkgs pkgs-unstable; };
 
+  mkshCaseInsensitive = pkgs.mksh.overrideAttrs (oldAttrs: {
+    patches = (oldAttrs.patches or []) ++ [
+      ./mksh-case-insensitive-completion.patch
+    ];
+  });
+
   oci-cli-latest = pkgs-unstable.oci-cli.overridePythonAttrs (_: {
     version = "3.93.0";
     src = pkgs.fetchFromGitHub {
@@ -127,7 +133,7 @@ xclip # (Optional: for tiny copy/paste)
     st-custom
     #dash
     lldb
-    mksh
+    mkshCaseInsensitive
     (rust-bin.stable.latest.default.override {
       extensions = [ "clippy" "rustfmt" "rust-src" ];
     })
@@ -265,7 +271,7 @@ xclip # (Optional: for tiny copy/paste)
   # This forces st (and your user environment) to default to dash
   home.sessionVariables = {
     #SHELL = "${pkgs.dash}/bin/dash";
-    SHELL = "${pkgs.mksh}/bin/mksh";
+    SHELL = "${mkshCaseInsensitive}/bin/mksh";
     ENV = "$HOME/.mkshrc";
     BROWSER = "google-chrome-stable"; 
   };
