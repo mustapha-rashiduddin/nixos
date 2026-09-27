@@ -120,15 +120,24 @@ pkgs.st.overrideAttrs (oldAttrs: {
     # off the end of the table. fc-match confirms weight=200..800 all resolve
     # to Bold for every family tried, CMU Amiri Terminal included, even though
     # it does ship a real SemiBold. "weight=semibold" is the spelling that
-    # actually selects SemiBold. CMU Typewriter Text has no SemiBold cut
-    # (Light/Regular/Bold only) so it lands on Bold, cmuntb.otf, the closest
-    # face to CMU Amiri Terminal's SemiBold.ttf.
+    # actually selects SemiBold. CMU Symbol Terminal has no SemiBold cut
+    # (Regular/Bold only) so it lands on Bold, the closest face to
+    # CMU Amiri Terminal's SemiBold.ttf.
     #
     # antialias=false:autohint=false came with the old PxPlus bitmap font and
     # is dropped, so this scalable OTF is hinted and antialiased the way
     # cosmic-term's swash rasterizer renders it.
-    sed -i 's/font = ".*"/font = "CMU Typewriter Text:size=17.5:weight=semibold"/' config.def.h
-    grep -q 'font = "CMU Typewriter Text:size=17.5:weight=semibold"' config.def.h
+    # "CMU Symbol Terminal" is cm-unicode's own CMU Typewriter Text with the
+    # TUI symbols folded in, built in configuration.nix. cm-unicode covers
+    # none of them, so they used to fall through to fontconfig's next pick --
+    # DejaVu Sans, a proportional face wider than st's 12px cell. st advances
+    # every cell by the primary font's width and clips each glyph run to it,
+    # so the gear, box, check, star, diamond and the Braille spinner frames all
+    # came out with their sides shaved off. The new family carries those
+    # glyphs itself, each scaled into CMU's cell with a 525/1000em advance, so
+    # nothing can overflow a cell and no fallback is consulted for them.
+    sed -i 's/font = ".*"/font = "CMU Symbol Terminal:size=17.5:weight=semibold"/' config.def.h
+    grep -q 'font = "CMU Symbol Terminal:size=17.5:weight=semibold"' config.def.h
 
     # dc.bfont and dc.ibfont keep stock FC_WEIGHT_BOLD, which is the 700
     # that cosmic-term's bold_font_weight = 700 asks for. The previous

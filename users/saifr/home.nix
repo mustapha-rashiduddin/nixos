@@ -31,6 +31,8 @@ let
 
   litecli = import ./litecli.nix { inherit pkgs; };
 
+  jev = import ./jev.nix { inherit pkgs pkgs-unstable; };
+
   oci-cli-latest = pkgs-unstable.oci-cli.overridePythonAttrs (_: {
     version = "3.93.0";
     src = pkgs.fetchFromGitHub {
@@ -204,6 +206,9 @@ xclip # (Optional: for tiny copy/paste)
     # check50 wrapper: guesses the problem slug from the current directory
     (writeShellScriptBin "check50x" (builtins.readFile ./check50x.sh))
 
+    # jev: ask the Jev (TypeSafe System One) model typed questions about some state
+    jev.cli
+
     #sqls
     gh
     cosmic-term
@@ -255,7 +260,7 @@ xclip # (Optional: for tiny copy/paste)
       pypdf
       numpy
       pandas
-    ]))
+    ] ++ [ jev.typesafe-sdk ]))
   ];
   # This forces st (and your user environment) to default to dash
   home.sessionVariables = {

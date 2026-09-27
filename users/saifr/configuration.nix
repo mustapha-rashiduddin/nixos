@@ -129,6 +129,195 @@ let
     arabicFont = "${pkgs.amiri}/share/fonts/truetype/Amiri-Regular.ttf";
     arabicScale = amiriScale;
   };
+
+  # CMU Typewriter Text, plus the handful of symbols OpenCode's TUI leans on.
+  #
+  # cm-unicode covers none of them, so st used to hand those cells to whatever
+  # fontconfig ranked next (DejaVu Sans, a *proportional* face). st advances
+  # every cell by the width of the primary font and clips each glyph run to
+  # that width, so a wider proportional fallback gets its sides cut off --
+  # which is why the gear, box, check, star and diamond all looked mangled.
+  #
+  # No single installed monospace face fixes this: DejaVu Sans Mono has the
+  # five geometric marks but no Braille, and Unifont has all fifteen but draws
+  # U+2699 at 0.81em and U+2731 at 0.94em, far wider than CMU's 0.525em cell.
+  #
+  # So we build the variant: take CMU as the base and fold the symbols in from
+  # DejaVu Sans, scaling each outline down to fit CMU's cell, centring it, and
+  # forcing its advance to CMU's own 525/1000em. Every glyph CMU already ships
+  # is left byte-for-byte alone, so text still looks exactly as it did, and the
+  # symbols can never overflow into a neighbouring cell.
+  #
+  # The donor is emitted as CFF to match cm-unicode's own flavour. That keeps
+  # Merger on its happy path and spares us the fontforge round-trip the
+  # Arabic merge above needs.
+  symbolTerminalPython = pkgs.writeText "build-cmu-symbol-terminal.py" ''
+    import os
+
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.merge import Merger
+    from fontTools.misc.transform import Transform
+    from fontTools.pens.boundsPen import BoundsPen
+    from fontTools.pens.qu2cuPen import Qu2CuPen
+    from fontTools.pens.recordingPen import DecomposingRecordingPen
+    from fontTools.pens.t2CharStringPen import T2CharStringPen
+    from fontTools.pens.transformPen import TransformPen
+    from fontTools.ttLib import TTFont
+
+    # OpenCode's TUI symbols, plus the frames of the Braille thinking spinner.
+    GEOMETRIC = [0x2699, 0x25A3, 0x2713, 0x2731, 0x25C8]
+    BRAILLE = [0x280B, 0x2819, 0x2839, 0x2838, 0x283C,
+               0x2834, 0x2826, 0x2827, 0x2807, 0x280F]
+    SYMBOLS = GEOMETRIC + BRAILLE
+
+    UPEM = 1000
+    CELL = 525          # CMU Typewriter Text advance, 0.525em
+    CENTRE = CELL / 2.0
+
+    # (max ink width, max ink height, vertical centre) in font units. The
+    # geometric marks are sized like a capital; the Braille cells stay small
+    # and sit a touch lower, the way terminal spinners are drawn.
+    FIT_GEOMETRIC = (450, 470, 300)
+    FIT_BRAILLE = (340, 340, 262)
+
+
+    def build_donor(src_path, out_path):
+        """A 1000-upem CFF font holding just the symbols, already fitted to
+        CMU's cell."""
+        src = TTFont(src_path)
+        src_glyphset = src.getGlyphSet()
+        src_cmap = src.getBestCmap()
+        ratio = UPEM / src["head"].unitsPerEm
+
+        missing = [c for c in SYMBOLS if c not in src_cmap]
+        if missing:
+            raise SystemExit("donor %s lacks %s" % (
+                src_path, " ".join("U+%04X" % c for c in missing)))
+
+        glyph_order = [".notdef"]
+        charstrings = {".notdef": T2CharStringPen(0, None).getCharString()}
+        metrics = {".notdef": (CELL, 0)}
+        cmap = {}
+
+        for codepoint in SYMBOLS:
+            name = "symU%04X" % codepoint
+
+            # Flatten any composite first; a charstring pen cannot resolve
+            # components of its own.
+            outline = DecomposingRecordingPen(src_glyphset)
+            src_glyphset[src_cmap[codepoint]].draw(outline)
+
+            # Measure in CMU's units, normalising the donor's upem as we go.
+            probe = BoundsPen(src_glyphset)
+            outline.replay(TransformPen(probe, Transform(ratio, 0, 0, ratio, 0, 0)))
+            x_min, y_min, x_max, y_max = probe.bounds
+
+            max_w, max_h, centre_y = (FIT_BRAILLE if codepoint in BRAILLE
+                                      else FIT_GEOMETRIC)
+            w = x_max - x_min
+            h = y_max - y_min
+            if w <= 0 or h <= 0:
+                raise SystemExit("U+%04X has an empty outline" % codepoint)
+            scale = min(max_w / w, max_h / h)
+
+            # Centre the fitted ink on the cell, then hold the advance at
+            # CMU's own width so the terminal grid cannot drift.
+            dx = CENTRE - (x_min + x_max) / 2.0 * scale
+            dy = centre_y - (y_min + y_max) / 2.0 * scale
+            fit = Transform(ratio * scale, 0, 0, ratio * scale, dx, dy)
+
+            charstring_pen = T2CharStringPen(0, None)
+            outline.replay(TransformPen(
+                Qu2CuPen(charstring_pen, 0.5, reverse_direction=True), fit))
+
+            glyph_order.append(name)
+            charstrings[name] = charstring_pen.getCharString()
+            metrics[name] = (CELL, int(round(x_min * scale + dx)))
+            cmap[codepoint] = name
+
+        font = FontBuilder(UPEM, isTTF=False)
+        font.setupGlyphOrder(glyph_order)
+        font.setupCharacterMap(cmap)
+        font.setupCFF(
+            "CMUSymbolTerminal-Donor",
+            {"FullName": "CMU Symbol Terminal Donor",
+             "FamilyName": "CMU Symbol Terminal Donor",
+             "Weight": "Regular"},
+            charstrings, {},
+        )
+        font.setupHorizontalMetrics(metrics)
+        font.setupHorizontalHeader(ascent=827, descent=-233)
+        font.setupOS2(sTypoAscender=827, sTypoDescender=-233, usWeightClass=400)
+        font.setupNameTable({
+            "familyName": "CMU Symbol Terminal Donor",
+            "styleName": "Regular",
+            "psName": "CMUSymbolTerminal-Donor",
+        })
+        font.setupPost()
+        font.save(out_path)
+
+
+    def finish(font, family, style, weight, out_path):
+        # The donor already fixed every symbol's advance, but assert it here
+        # too: holding the cell width open is the whole point of this font.
+        hmtx = font["hmtx"]
+        cmap = font.getBestCmap()
+        for codepoint in SYMBOLS:
+            name = cmap[codepoint]
+            hmtx.metrics[name] = (CELL, hmtx.metrics[name][1])
+
+        font["post"].isFixedPitch = 1
+        font["OS/2"].panose.bProportion = 9
+        font["OS/2"].usWeightClass = weight
+
+        names = font["name"]
+        names.names = [
+            record
+            for record in names.names
+            if record.nameID not in {1, 2, 3, 4, 6, 16, 17, 21, 22}
+        ]
+        values = {
+            1: family,
+            2: style,
+            3: f"{family} {style}",
+            4: f"{family} {style}",
+            6: f"CMUSymbolTerminal-{style}",
+            16: family,
+            17: style,
+        }
+        for platform_id, encoding_id, language_id in [(3, 1, 0x409), (1, 0, 0)]:
+            for name_id, value in values.items():
+                names.setName(value, name_id, platform_id, encoding_id, language_id)
+
+        font.save(out_path)
+
+
+    temporary = os.environ["TMPDIR"]
+    output = os.path.join(os.environ["out"], "share", "fonts", "truetype")
+    os.makedirs(output, exist_ok=True)
+    family = "CMU Symbol Terminal"
+
+    jobs = [
+        ("Regular", "CMU_REGULAR", "DEJAVU_REGULAR", 400),
+        ("Bold", "CMU_BOLD", "DEJAVU_BOLD", 700),
+    ]
+    for style, base_var, donor_var, weight in jobs:
+        donor = os.path.join(temporary, f"donor-{style}.otf")
+        build_donor(os.environ[donor_var], donor)
+        merged = Merger().merge([os.environ[base_var], donor])
+        finish(merged, family, style, weight,
+               os.path.join(output, f"CMUSymbolTerminal-{style}.otf"))
+  '';
+
+  cmuSymbolTerminal = pkgs.runCommand "cmu-symbol-terminal" {
+    nativeBuildInputs = [ pythonWithFontTools ];
+    CMU_REGULAR = "${pkgs.cm_unicode}/share/fonts/opentype/cmuntt.otf";
+    CMU_BOLD = "${pkgs.cm_unicode}/share/fonts/opentype/cmuntb.otf";
+    DEJAVU_REGULAR = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf";
+    DEJAVU_BOLD = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans-Bold.ttf";
+  } ''
+    python ${symbolTerminalPython}
+  '';
 in
 {
   # 1. Import Home Manager so we can use it below
@@ -267,6 +456,7 @@ in
       amiri
       cmuAmiriTerminal
       cmuScheherazadeTerminal
+      cmuSymbolTerminal
       vazir-code-font
     ];
     
@@ -312,6 +502,8 @@ in
     htop
     feh
     check50
+    sops
+    age
   ] ++ (with pkgs.nixos-artwork.wallpapers; [ simple-dark-gray ]);
 
   # Cargo-installed tools (notably `erd`) on PATH for EVERY shell. This is baked
