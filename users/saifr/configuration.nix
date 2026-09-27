@@ -149,10 +149,15 @@ let
   # glyphs fitted to CMU's 525/1000em cell, wide glyphs fitted to two of them.
   # Nothing is left over for a fallback to mis-measure.
   #
-  # Two donor sources. DejaVu Sans supplies the fifteen narrow symbols (cm-unicode
-  # has none, and it is the only installed face carrying all of them that can be
-  # scaled into the cell). Noto Emoji -- monochrome, 1400+ real outlines --
-  # supplies everything else.
+  # Three donor sources. DejaVu Sans supplies the fifteen narrow symbols
+  # (cm-unicode has none, and it is the only installed face carrying all of them
+  # that can be scaled into the cell). Noto Emoji -- monochrome, 1400+ real
+  # outlines -- supplies everything else. NewCM Math supplies the twenty-four
+  # mathematical operators and double-struck letters, which cm-unicode omits
+  # from all 33 of its faces because the Knuth originals live in the cmmi/cmsy
+  # cuts that the package does not ship; without it they fall back to DejaVu
+  # Sans, a proportional face, and fifteen of the twenty-four draw wider than
+  # the cell, the widest by 41%.
   #
   # The emoji pass may only add codepoints the CMU base lacks, so box drawing,
   # arrows and maths keep their original outlines byte for byte and existing
@@ -177,12 +182,50 @@ let
                0x2834, 0x2826, 0x2827, 0x2807, 0x280F]
     SYMBOLS = GEOMETRIC + BRAILLE
 
+    # Mathematical operators, relations and double-struck letters. cm-unicode
+    # carries none of these in any of its 33 faces: Knuth's repertoire lives in
+    # cmmi and cmsy, and the package ships neither, so every one of them fell
+    # through to DejaVu Sans -- 15 of the 24 drawing wider than the cell, the
+    # widest by 41%. NewCM Math is the direct successor to that missing CM cut
+    # and already shares cm-unicode's 1000 upem, so nothing needs coordinate
+    # conversion.
+    MATH = [0x2200, 0x2203, 0x2205, 0x2208, 0x2209, 0x2227, 0x2228, 0x2229,
+            0x222A, 0x2261, 0x2282, 0x2286, 0x2295, 0x2118, 0x2115, 0x211A,
+            0x211D, 0x2124, 0x21D2, 0x21D4, 0x2308, 0x2309, 0x230A, 0x230B]
+
+    # The two double arrows, which need a width cap of their own. Knuth draws
+    # them 956 and 879 units across against a 525 cell -- 1.8x too wide to show
+    # at natural size -- so they are the only glyphs here that are scaled down
+    # by width rather than height, and the height comes along for the ride:
+    # at 450 wide they land 254 tall, 24% of the cell, and read as specks next
+    # to a 528-tall wedge. Letting them spend the side bearings buys back
+    # height that is otherwise unreachable without distorting Knuth's 1.7:1
+    # proportions or giving them two cells (which would shift the line).
+    MATH_WIDE = [0x21D2, 0x21D4]
+
+    # The floor and ceiling brackets, which need a height cap of their own.
+    # Knuth draws them 242 x 1000 -- a 4.1:1 slenderness that is his, and is
+    # reproduced here to under 1% -- so they are scaled by height and come out
+    # narrow. At the shared 620 ceiling they measured 151 wide, 29% of the cell,
+    # which read as threads next to a 450-wide wedge. Raising the ceiling for
+    # these four widens them proportionally, since they stay height-bound, and
+    # lands them on the 37% that DejaVu's brackets used to occupy.
+    MATH_TALL = [0x2308, 0x2309, 0x230A, 0x230B]
+
     UPEM = 1000
     CELL = 525
     CENTRE = CELL / 2.0
 
     FIT_GEOMETRIC = (450, 470, 300)
     FIT_BRAILLE = (340, 340, 262)
+
+    # Most math is width-bound like the geometric marks -- same 450, so an
+    # element-of is exactly as wide as a gear -- and lands well inside the cell.
+    # The two groups below are the exceptions, and each gets its own cap
+    # because they are bound on the other axis.
+    FIT_MATH = (450, 620, 300)
+    FIT_MATH_WIDE = (490, 620, 300)
+    FIT_MATH_TALL = (450, 800, 300)
 
     # Emoji are fitted per cell-count: a wide rune gets two cells of st's clip
     # region, so it may be drawn twice as wide as a narrow one.
@@ -307,11 +350,12 @@ let
     family = "CMU Symbol Terminal"
 
     jobs = [
-        ("Regular", "CMU_REGULAR", "DEJAVU_REGULAR", "EMOJI_REGULAR", 400),
-        ("Bold", "CMU_BOLD", "DEJAVU_BOLD", "EMOJI_BOLD", 700),
+        ("Regular", "CMU_REGULAR", "DEJAVU_REGULAR", "EMOJI_REGULAR",
+         "MATH_REGULAR", 400),
+        ("Bold", "CMU_BOLD", "DEJAVU_BOLD", "EMOJI_BOLD", "MATH_BOLD", 700),
     ]
 
-    for style, base_var, sym_var, emoji_var, weight in jobs:
+    for style, base_var, sym_var, emoji_var, math_var, weight in jobs:
         base_path = os.environ[base_var]
         base_cmap = set(TTFont(base_path, lazy=True).getBestCmap())
 
@@ -322,7 +366,7 @@ let
         emoji_cmap = emoji_src.getBestCmap()
         specs = []
         for codepoint in sorted(emoji_cmap):
-            if codepoint in base_cmap or codepoint in SYMBOLS:
+            if codepoint in base_cmap or codepoint in SYMBOLS or codepoint in MATH:
                 continue
             ncell = cell_count(codepoint)
             max_w, max_h, centre_y = (FIT_EMOJI_WIDE if ncell == 2
@@ -331,18 +375,25 @@ let
 
         sym_donor = os.path.join(temporary, f"donor-sym-{style}.otf")
         emoji_donor = os.path.join(temporary, f"donor-emoji-{style}.otf")
+        math_donor = os.path.join(temporary, f"donor-math-{style}.otf")
         n_sym, _ = build_donor(
             os.environ[sym_var], sym_donor,
             [(c, *(FIT_BRAILLE if c in BRAILLE else FIT_GEOMETRIC), 1)
              for c in SYMBOLS], "sym")
         n_emoji, skipped = build_donor(
             os.environ[emoji_var], emoji_donor, specs, "emoji")
+        n_math, skipped_math = build_donor(
+            os.environ[math_var], math_donor,
+            [(c, *(FIT_MATH_TALL if c in MATH_TALL
+                   else FIT_MATH_WIDE if c in MATH_WIDE
+                   else FIT_MATH), 1) for c in MATH], "math")
 
-        merged = Merger().merge([base_path, sym_donor, emoji_donor])
+        merged = Merger().merge([base_path, sym_donor, emoji_donor, math_donor])
         out = os.path.join(output, f"CMUSymbolTerminal-{style}.otf")
         finish(merged, family, style, weight, out)
-        print(f"{style}: +{n_sym} symbols, +{n_emoji} emoji "
-              f"({skipped} empty/duplicate), {len(merged.getBestCmap())} codepoints")
+        print(f"{style}: +{n_sym} symbols, +{n_emoji} emoji, +{n_math} math "
+              f"({skipped} empty/duplicate, {skipped_math} math skipped), "
+              f"{len(merged.getBestCmap())} codepoints")
 
   '';
 
@@ -354,6 +405,8 @@ let
     DEJAVU_BOLD = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans-Bold.ttf";
     EMOJI_REGULAR = "${pkgs.noto-fonts-monochrome-emoji}/share/fonts/noto/NotoEmoji.ttf";
     EMOJI_BOLD = "${pkgs.noto-fonts-monochrome-emoji}/share/fonts/noto/NotoEmoji.ttf";
+    MATH_REGULAR = "${pkgs.newcomputermodern}/share/fonts/opentype/public/NewCMMath-Book.otf";
+    MATH_BOLD = "${pkgs.newcomputermodern}/share/fonts/opentype/public/NewCMMath-Bold.otf";
   } ''
     python ${symbolTerminalPython}
   '';
