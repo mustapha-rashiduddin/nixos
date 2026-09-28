@@ -569,6 +569,13 @@ in
     };
   };
 
+  environment.etc."opt/chrome/policies/managed/dark-reader.json".text = builtins.toJSON {
+    ExtensionSettings.eimadpbcbfnmbkopoojfekhnkhdbieeh = {
+      installation_mode = "normal_installed";
+      update_url = "https://clients2.google.com/service/update2/crx";
+    };
+  };
+
   # Shell
   programs.zsh.enable = true;
   users.defaultUserShell = pkgs.zsh;
