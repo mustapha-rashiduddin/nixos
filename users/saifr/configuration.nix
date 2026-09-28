@@ -149,7 +149,7 @@ let
   # glyphs fitted to CMU's 525/1000em cell, wide glyphs fitted to two of them.
   # Nothing is left over for a fallback to mis-measure.
   #
-  # Three donor sources. DejaVu Sans supplies the sixteen narrow symbols
+  # Three donor sources. DejaVu Sans supplies the seventeen narrow symbols
   # (cm-unicode has none, and it is the only installed face carrying all of them
   # that can be scaled into the cell). Noto Emoji -- monochrome, 1400+ real
   # outlines -- supplies everything else. NewCM Math supplies the twenty-four
@@ -177,7 +177,7 @@ let
     from fontTools.pens.transformPen import TransformPen
     from fontTools.ttLib import TTFont
 
-    GEOMETRIC = [0x2699, 0x25A3, 0x25B3, 0x2713, 0x2731, 0x25C8]
+    GEOMETRIC = [0x2699, 0x25A3, 0x25B3, 0x25BC, 0x2713, 0x2731, 0x25C8]
     BRAILLE = [0x280B, 0x2819, 0x2839, 0x2838, 0x283C,
                0x2834, 0x2826, 0x2827, 0x2807, 0x280F]
     SYMBOLS = GEOMETRIC + BRAILLE
