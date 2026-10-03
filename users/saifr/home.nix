@@ -93,6 +93,7 @@ in
     # xdg-desktop-portal-gtk
     dunst
     wesnoth
+    steam
 
       ((vim-full.override {
     features = "huge";
@@ -137,6 +138,7 @@ xclip # (Optional: for tiny copy/paste)
     (rust-bin.stable.latest.default.override {
       extensions = [ "clippy" "rustfmt" "rust-src" ];
     })
+    rust-analyzer
     unzip
     litecli
     anki-bin
@@ -170,6 +172,12 @@ xclip # (Optional: for tiny copy/paste)
     cmake
     ninja
     gdb
+    lld
+    ccache
+    pkg-config
+    patchelf
+    zip
+    unzip
 
     nodejs
     bashdb
