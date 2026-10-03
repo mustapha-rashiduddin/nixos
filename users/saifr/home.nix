@@ -1,22 +1,22 @@
 { config, pkgs, pkgs-unstable, inputs, cosmicTerminalFontName, ... }:
 
 let 
-  rocqPackages = pkgs-unstable.rocqPackages_9_2;
-  rocq = rocqPackages.rocq-core;
-  rocq-lsp = (rocqPackages.callPackage (pkgs-unstable.path + "/pkgs/development/rocq-modules/coq-lsp") {
-    mkCoqDerivation = rocqPackages.mkRocqDerivation;
-    coq = rocqPackages.coq;
-    serapi = null;
-    version = "dev";
-  }).overrideAttrs (_: {
-    name = "coq-lsp-0.2.5+9.2-dev";
-    src = pkgs-unstable.fetchFromGitHub {
-      owner = "rocq-community";
-      repo = "rocq-lsp";
-      rev = "f49d7b391c8dc6599a00d126d7bfedc9efbdc2e7";
-      hash = "sha256-VJLe7zNcvbUN0QsA/cKuhyr6kHKGWDf9Wp8uFhHQGvw=";
-    };
-  });
+  # rocqPackages = pkgs-unstable.rocqPackages_9_2;
+  # rocq = rocqPackages.rocq-core;
+  # rocq-lsp = (rocqPackages.callPackage (pkgs-unstable.path + "/pkgs/development/rocq-modules/coq-lsp") {
+    # mkCoqDerivation = rocqPackages.mkRocqDerivation;
+    # coq = rocqPackages.coq;
+    # serapi = null;
+    # version = "dev";
+  # }).overrideAttrs (_: {
+    # name = "coq-lsp-0.2.5+9.2-dev";
+    # src = pkgs-unstable.fetchFromGitHub {
+      # owner = "rocq-community";
+      # repo = "rocq-lsp";
+      # rev = "f49d7b391c8dc6599a00d126d7bfedc9efbdc2e7";
+      # hash = "sha256-VJLe7zNcvbUN0QsA/cKuhyr6kHKGWDf9Wp8uFhHQGvw=";
+    # };
+  # });
 
   #erd-go = import ./erd-go.nix { inherit pkgs; };
   #qwen-agent = import ./qwen-agent.nix { inherit pkgs; };
@@ -74,11 +74,11 @@ in
   #};
 
   home.packages = with pkgs; [
-    (rocq.withPackages (ps: [
-      ps.stdlib
-      ps.stdpp
-      rocq-lsp
-    ]))
+    # (rocq.withPackages (ps: [
+      # ps.stdlib
+      # ps.stdpp
+      # rocq-lsp
+    # ]))
 
     wl-clipboard
     fresh-ide
@@ -138,7 +138,13 @@ xclip # (Optional: for tiny copy/paste)
     (rust-bin.stable.latest.default.override {
       extensions = [ "clippy" "rustfmt" "rust-src" ];
     })
-    rust-analyzer
+    # From unstable: the stable channel still ships rust-analyzer 2025-10-28,
+    # which invokes cargo with nightly-only flags (--lockfile-path,
+    # -Zunstable-options, --compile-time-deps) and tries to build the sysroot
+    # inside the read-only /nix/store. Both make `cargo metadata` fail, which
+    # silently costs the editor completions, go-to-definition and external
+    # crates, and emits "Failed to run build scripts of some packages" on load.
+    pkgs-unstable.rust-analyzer
     unzip
     litecli
     anki-bin
@@ -338,6 +344,9 @@ xclip # (Optional: for tiny copy/paste)
         command printf '\033]11;#%s\007\033]10;#%s\007\033]12;#%s\007' "$bg" "$fg" "$fg"
     }
     PS1='$(st_theme_osc)$ '
+
+    # Rustlings shim
+    export PATH="$HOME/bin:$PATH"
   '';
 
   # This configures volumeicon to show a slider and use your mixer
