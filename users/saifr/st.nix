@@ -65,6 +65,12 @@ pkgs.st.overrideAttrs (oldAttrs: {
       hash = "sha256-8oVLgbsYCfMhNEOGadb5DFajdDKPxwgf3P/4vOXfUFo=";
     })
     ./st-selection-autoscroll.diff
+    # fix_keyboard_input: CSI u (kitty/fixterms) keyboard protocol support
+    # Enables Ctrl+Alt+h and other modified key combinations to be distinguished
+    (pkgs.fetchpatch {
+      url = "https://st.suckless.org/patches/fix_keyboard_input/st-fix-keyboard-input-20180605-dc3b5ba.diff";
+      hash = "sha256-cpO+bVbmRVYEBjC6ii5o7ZdmTnDOxMJxTa4VqwEO2vo=";
+    })
   ];
 
   postPatch = ''
@@ -81,6 +87,15 @@ pkgs.st.overrideAttrs (oldAttrs: {
     # It collides with rainfrog's Alt+Enter query-execute keybinding.
     # (F11 fullscreen binding is kept; i3 $mod+g also toggles fullscreen.)
     sed -i '/XK_Return.*fullscreen/d' config.def.h
+
+# fix_keyboard_input patch only includes XK_m, XK_i, XK_A-Z in mappedkeys.
+    # Add XK_h to mappedkeys AND key table so Ctrl+Alt+h sends CSI u (\033[104;7u).
+    sed -i '/^static KeySym mappedkeys\[\] = {/a\    XK_h,' config.def.h
+    # Add key table entries for XK_h with Ctrl+Alt (after XK_i entries)
+    sed -i '/{ XK_i,.*Mod1Mask|ControlMask.*105;7u/a\
+\    { XK_h,            Mod1Mask|ControlMask,           "\033[104;7u", 0,  0},\
+\    { XK_h,            Mod1Mask|ControlMask|ShiftMask, "\033[104;8u", 0,  0},' config.def.h
+    grep -A 10 "mappedkeys" config.def.h >&2
 
     # Font: st's "COSMIC Terminal" font, i.e. whatever
     # ~/.config/cosmic/com.system76.CosmicTerm/v1 currently holds.
