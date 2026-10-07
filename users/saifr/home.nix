@@ -92,6 +92,11 @@ in
     # xdg-desktop-portal
     # xdg-desktop-portal-gtk
     dunst
+    # XSettings manager. GTK4 on bare i3 has no XSettings daemon to read, and
+    # Net/IconThemeName is the only key it will consult to pick an icon theme --
+    # see config-manager/dark-icons.py for why the icon theme cannot be changed
+    # any other way. Autostarted from the i3 config.
+    xsettingsd
     wesnoth
     steam
 
@@ -327,7 +332,8 @@ xclip # (Optional: for tiny copy/paste)
         [ -n "$LOADOUT_CWD" ] && [ -d "$LOADOUT_CWD" ] && cd "$LOADOUT_CWD"
         eval "set -- $LOADOUT_SCRIPT \"\$@\"; \"\$@\""
     }
-    # theme - switch st/neovim between light and dark (mksh only)
+    # theme - switch st/neovim/helix/nautilus/emacs/chrome between light and dark
+    # (mksh only)
     alias light="$HOME/.config/config-manager/theme.sh light"
     alias dark="$HOME/.config/config-manager/theme.sh dark"
     # ghostty/cosmic theme (mksh only)
