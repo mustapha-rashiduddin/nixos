@@ -168,3 +168,38 @@
   * Absolute coordinates.
   */
  void
+--- st-pristine/st.c	2026-10-10 09:00:37.748214025 +0500
++++ st-src/st.c	2026-10-10 12:04:27.065348113 +0500
+@@ -1941,6 +1941,22 @@
+ 			} else {
+ 				tfulldirt();
+ 			}
++			/*
++			 * OSC 12 writes defaultcs straight into dc.col[] and
++			 * never goes through xloadcols(), so it is the one colour
++			 * set that used to survive a palette reload -- and the
++			 * one that leaves a cursor stranded on the compiled-in
++			 * colour when an app sets it and then exits (opencode
++			 * does exactly this, which put a #292929 cursor on a
++			 * #1b1b1b background). Re-assert the palette so the
++			 * cursor ends up owned by the theme rather than by
++			 * whichever app last touched it. Deliberately only for
++			 * OSC 12: foreground and background stay under the
++			 * app's control, because apps legitimately use OSC 10
++			 * and 11 (transparent backgrounds especially).
++			 */
++			if (par == 12)
++				xloadpalette();
+ 			return;
+ 		case 4: /* color set */
+ 			if (narg < 3)
+--- st-pristine/win.h	2026-10-10 09:00:37.748586528 +0500
++++ st-src/win.h	2026-10-10 12:05:49.711306104 +0500
+@@ -30,6 +30,7 @@
+ void xfinishdraw(void);
+ void xloadcols(void);
+ int xsetcolorname(int, const char *);
++void xloadpalette(void);
+ int xgetcolor(int, unsigned char *, unsigned char *, unsigned char *);
+ void xseticontitle(char *);
+ void xsettitle(char *);
