@@ -27,6 +27,7 @@ let
 
   fresh-ide = import ./fresh-ide.nix { inherit pkgs; }; # <--- ADD THIS HERE
   webots = import ./webots.nix { inherit pkgs; }; # <--- ADD THIS
+  neudecide_custom = import ./neudecide.nix { inherit pkgs pkgs-unstable; }; # q4 voice->tool-call model
   st-custom = import ./st.nix { inherit pkgs; };
 
   litecli = import ./litecli.nix { inherit pkgs; };
@@ -138,6 +139,11 @@ xclip # (Optional: for tiny copy/paste)
 
     st-custom
     #dash
+    # q4 voice->tool-call model. The model weights are vendored into the
+    # store, so it runs offline with no Hugging Face token; .cli is the
+    # wrapper that points the library at them.
+    neudecide_custom.cli
+    neudecide_custom.neudecide_custom
     lldb
     mkshCaseInsensitive
     (rust-bin.stable.latest.default.override {
