@@ -173,7 +173,10 @@ xclip # (Optional: for tiny copy/paste)
     rainfrog
     #obs-studio
     #fd
-    #xdotool
+    # Drives opencode's command palette for config-manager/opencode-theme.sh.
+    # TIOCSTI is disabled on this box, so XTEST is the only way to put
+    # keystrokes into a running TUI.
+    xdotool
     libreoffice-fresh
     llvmPackages.libcxx
 
