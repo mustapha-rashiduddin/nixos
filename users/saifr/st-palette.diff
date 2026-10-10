@@ -169,7 +169,7 @@
   */
  void
 --- st-pristine/st.c	2026-10-10 09:00:37.748214025 +0500
-+++ st-src/st.c	2026-10-10 12:04:27.065348113 +0500
++++ st-src/st.c	2026-10-10 14:51:41.230118064 +0500
 @@ -1941,6 +1941,22 @@
  			} else {
  				tfulldirt();
@@ -193,6 +193,50 @@
  			return;
  		case 4: /* color set */
  			if (narg < 3)
+@@ -1965,6 +1981,20 @@
+ 				 * are dirty
+ 				 */
+ 				tfulldirt();
++				/*
++				 * An indexed reset -- "OSC 104;N" -- assigns
++				 * colorname[N] straight into dc.col[] and never
++				 * reaches xloadcols(), so it is a third way past
++				 * the palette. Verified by sending OSC 104;259:
++				 * the background came back as the compiled-in
++				 * #d7d7d7 rather than the file's. That index range
++				 * includes 256, which is defaultcs here, so this is
++				 * what leaves a cursor stranded on the built-in
++				 * Light #292929 once an app resets colours on the
++				 * way out. Re-assert the palette, as for OSC 12.
++				 */
++				if (par == 104)
++					xloadpalette();
+ 			}
+ 			return;
+ 		case 110: /* reset dynamic VT100 text foreground color */
+@@ -1978,6 +2008,22 @@
+ 				fprintf(stderr, "erresc: %s color not found\n", osc_table[j].str);
+ 			} else {
+ 				tfulldirt();
++				/*
++				 * OSC 110/111/112 -- "reset to default" -- call
++				 * xsetcolorname(idx, NULL), and a NULL name makes
++				 * xloadcolor() fall back to colorname[i], the colour
++				 * compiled into the binary. That is the path opencode
++				 * takes on the way out: its last act is OSC 112,
++				 * which reset the cursor to the built-in Light
++				 * #292929 on a #1b1b1b background. Reproduced
++				 * end-to-end on a real terminal.
++				 *
++				 * "Reset to default" should mean back to whatever
++				 * this terminal is configured with, and that is the
++				 * palette file, so re-assert it. Same reasoning as
++				 * OSC 12 and OSC 104 above: the theme owns these.
++				 */
++				xloadpalette();
+ 			}
+ 			return;
+ 		}
 --- st-pristine/win.h	2026-10-10 09:00:37.748586528 +0500
 +++ st-src/win.h	2026-10-10 12:05:49.711306104 +0500
 @@ -30,6 +30,7 @@
