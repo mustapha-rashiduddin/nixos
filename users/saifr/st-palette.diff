@@ -1,5 +1,5 @@
 --- st-pristine/x.c	2026-10-10 09:00:37.748662454 +0500
-+++ st-src/x.c	2026-10-10 09:09:29.109046394 +0500
++++ st-src/x.c	2026-10-10 11:48:39.151537689 +0500
 @@ -4,6 +4,10 @@
  #include <limits.h>
  #include <locale.h>
@@ -11,7 +11,38 @@
  #include <sys/select.h>
  #include <time.h>
  #include <unistd.h>
-@@ -846,6 +850,125 @@
+@@ -790,6 +794,9 @@
+ 	return XftColorAllocName(xw.dpy, xw.vis, xw.cmap, name, ncolor);
+ }
+ 
++/* Defined below, but called from xloadcols() above. */
++void xloadpalette(void);
++
+ void
+ xloadcols(void)
+ {
+@@ -813,6 +820,20 @@
+ 				die("could not allocate color %d\n", i);
+ 		}
+ 	loaded = 1;
++
++	/*
++	 * Re-apply the palette file on every reload, not just at startup.
++	 * xloadcols() rebuilds everything from colorname[], which is compiled
++	 * into the binary, so any OSC 104 colour reset (st.c) or RIS throws the
++	 * palette away and the terminal snaps back to whatever was built in.
++	 * That is visible: an app that resets colours on exit -- opencode does --
++	 * leaves the cursor on the compiled-in colour, which on this machine is
++	 * the Light #292929, on whatever background is current. Calling this at
++	 * the end means the palette wins every time, so a reset is a no-op
++	 * instead of a regression. It cannot recurse: xloadpalette() goes through
++	 * xsetcolorname(), which does not call back into here.
++	 */
++	xloadpalette();
+ }
+ 
+ int
+@@ -846,6 +867,125 @@
  }
  
  /*
@@ -137,11 +168,3 @@
   * Absolute coordinates.
   */
  void
-@@ -1150,6 +1273,7 @@
- 	/* colors */
- 	xw.cmap = XDefaultColormap(xw.dpy, xw.scr);
- 	xloadcols();
-+	xloadpalette();
- 
- 	/* adjust fixed window geometry */
- 	win.w = 2 * borderpx + cols * win.cw;
