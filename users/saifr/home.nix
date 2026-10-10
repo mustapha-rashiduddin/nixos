@@ -339,8 +339,20 @@ xclip # (Optional: for tiny copy/paste)
     # ghostty/cosmic theme (mksh only)
     alias clight="$HOME/.config/config-manager/theme.sh clight"
     alias cdark="$HOME/.config/config-manager/theme.sh cdark"
-    # theme - repaint st colors on every prompt (output-direction OSC, safe
-    # even right after an app like nvim/erdcat exits and owns the screen)
+    # theme - st keeps the palette it was last given, so it does not need
+    # colours re-sent per prompt. Re-asserting them from PS1 put a colour
+    # change on the line editor's redraw path: Tab completion redraws the
+    # line, prompt included, and the window visibly reverted to the previous
+    # theme until the next repaint. The sequence was also incomplete -- it
+    # sent OSC 10/11/12 for fg/bg/cursor but never the OSC 4 palette -- so it
+    # left st holding a half-applied theme, and the compiled-in dark
+    # defaultbg (see st.nix) showed through on the repaint that followed.
+    # It also cost two `cat` forks on every single prompt.
+    #
+    # `light`/`dark` (config-manager/st-theme.py) sets the whole palette, and
+    # a new window sets its own at startup. st_theme_osc stays defined for
+    # the case it was written for: re-sending fg/bg/cursor on demand after a
+    # full-screen app has left the terminal looking wrong.
     [ "$(ps -o comm= -p "$PPID" 2>/dev/null)" = "st" ] && IS_ST=1 || IS_ST=0
     st_theme_osc() {
         [ "$IS_ST" = 1 ] || return
@@ -349,7 +361,7 @@ xclip # (Optional: for tiny copy/paste)
         [ -n "$fg" ] && [ -n "$bg" ] || return
         command printf '\033]11;#%s\007\033]10;#%s\007\033]12;#%s\007' "$bg" "$fg" "$fg"
     }
-    PS1='$(st_theme_osc)$ '
+    PS1='$ '
 
     # Rustlings shim
     export PATH="$HOME/bin:$PATH"
