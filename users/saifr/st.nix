@@ -1,24 +1,41 @@
 { pkgs }:
 
-# COSMIC Terminal's built-in "COSMIC Dark" color set, taken from cosmic_dark()
-# in cosmic-term 1.0.0 (src/terminal_theme.rs). This is what cosmic-term
-# actually renders here: its config sets app_theme = "Dark" and defines no
-# custom color_schemes_dark, so the builtin Dark scheme is the one in effect.
+# The palette st is BUILT with -- what a freshly opened window shows when
+# config-manager has no palette file for it to read.
 #
-# cosmic_dark() deliberately leaves NamedColor::Background unset, so the
-# background comes from the COSMIC theme instead: main.rs copies
-# theme.cosmic().background.base into terminal::WINDOW_BG_COLOR, and for the
-# Dark theme that base is the palette's gray_1, #1b1b1b. Foreground and Cursor
-# are both set to BrightWhite.
+# These are COSMIC Terminal's "COSMIC Light" colours, from cosmic_light() in
+# cosmic-term 1.0.0 (src/terminal_theme.rs) -- the same set as
+# config-manager/st_colors_light. cosmic_light() leaves
+# NamedColor::Background unset, so the background comes from the COSMIC theme
+# instead: main.rs copies theme.cosmic().background.base into
+# terminal::WINDOW_BG_COLOR, and for the Light theme that base is the
+# palette's gray_1, #d7d7d7.
+#
+# Why this block exists at all, when st-palette.diff below makes the colour at
+# startup a runtime decision: it is the fallback. A colour scheme bound into the
+# binary cannot chase the theme, so whichever set is baked in here is the wrong
+# one the moment the user switches -- and every window then flashes from it
+# before being corrected. st-palette.diff is what removes the flash: it makes st
+# read the active palette before it allocates its first pixel, so a new window
+# is born in the current theme and this array only decides what happens when
+# that file is missing or unreadable.
+#
+# Light is therefore chosen not for speed (the flash is gone either way) but
+# because a missing palette file should degrade to something readable rather
+# than to a black-on-black window. It also matches the bar and editors.
+#
+# At runtime, switching themes stays the OSC path and is unchanged.
 let
   ansi = [
-    "#1b1b1b" "#f16161" "#7cb987" "#ddc74c" "#6296be" "#be6dee" "#49bac8" "#bebebe"
-    "#808080" "#ff8985" "#97d5a0" "#fae365" "#7db1da" "#d68eff" "#49bac8" "#c4c4c4"
+    "#292929" "#8c151f" "#145129" "#624000"
+    "#003f5f" "#6d169c" "#004f57" "#bebebe"
+    "#808080" "#9d2329" "#235d34" "#714b00"
+    "#054b6f" "#7a28a9" "#005c5d" "#d7d7d7"
   ];
-  cursor = "#c4c4c4";
+  cursor = "#292929";
   reverseCursor = "#555555";
-  defaultFg = "#c4c4c4";
-  defaultBg = "#1b1b1b";
+  defaultFg = "#292929";
+  defaultBg = "#d7d7d7";
 
   # st's colorname[] is a flat positional array: 0-15 hold the ANSI colors and
   # 256-259 back defaultcs/defaultrcs/defaultfg/defaultbg. Rewriting the whole
@@ -71,6 +88,15 @@ pkgs.st.overrideAttrs (oldAttrs: {
       url = "https://st.suckless.org/patches/fix_keyboard_input/st-fix-keyboard-input-20180605-dc3b5ba.diff";
       hash = "sha256-cpO+bVbmRVYEBjC6ii5o7ZdmTnDOxMJxTa4VqwEO2vo=";
     })
+    # Read the active palette at startup, so a new window is born in the current
+    # theme instead of flashing from the compiled-in colours first.
+    #
+    # Must stay LAST: it needs xsetcolorname()/dc.col, which only exist once the
+    # scrollback patches above have rewritten st's colour table.
+    #
+    # It only touches x.c, so it also cannot collide with the colorname[] splice
+    # postPatch does to config.def.h.
+    ./st-palette.diff
   ];
 
   postPatch = ''
@@ -161,8 +187,8 @@ pkgs.st.overrideAttrs (oldAttrs: {
     # would invert things and render bold text *lighter* than normal text.
     # (dim_font_weight = 600 has no st equivalent: st has no ATTR_DIM.)
 
-    # Color scheme: COSMIC Terminal's "COSMIC Dark" set, spliced in as a whole
-    # so the positional colorname[] entries get replaced for real.
+    # Color scheme: the COSMIC Light set bound in `colorname` above, spliced in
+    # as a whole so the positional colorname[] entries get replaced for real.
     cat > colorname.new <<'COLORNAME'
 ${colorname}
 COLORNAME

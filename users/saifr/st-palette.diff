@@ -1,0 +1,147 @@
+--- st-pristine/x.c	2026-10-10 09:00:37.748662454 +0500
++++ st-src/x.c	2026-10-10 09:09:29.109046394 +0500
+@@ -4,6 +4,10 @@
+ #include <limits.h>
+ #include <locale.h>
+ #include <signal.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <ctype.h>
+ #include <sys/select.h>
+ #include <time.h>
+ #include <unistd.h>
+@@ -846,6 +850,125 @@
+ }
+ 
+ /*
++ * Palette file: an optional override of the compiled-in colours, read once at
++ * startup so a window opens in the theme actually chosen rather than flashing
++ * from whatever the binary was built with.
++ *
++ * The path is $ST_PALETTE_FILE, else $XDG_CONFIG_HOME/st/palette, else
++ * $HOME/.config/st/palette. The format is the plain "key = #rrggbb" file that
++ * config-manager/st_colors_{light,dark} already is -- color0..color15 plus
++ * foreground, background and cursor -- so switching themes is a copy of one
++ * file into place rather than a rebuild.
++ *
++ * This only ever overrides. A missing, unreadable, or malformed file (or a
++ * malformed entry within one) is skipped, so the terminal degrades to the
++ * compiled-in palette instead of failing to start.
++ */
++void
++xloadpalette(void)
++{
++	char path[PATH_MAX], line[256];
++	char *key, *val, *end, *hex;
++	const char *env;
++	char fg[8] = {0}, bg[8] = {0}, cs[8] = {0};
++	int i, n;
++	int ncol = 0;
++	int debug;
++	FILE *fp;
++
++	debug = getenv("ST_PALETTE_DEBUG") != NULL;
++
++	if ((env = getenv("ST_PALETTE_FILE")) != NULL && *env) {
++		snprintf(path, sizeof(path), "%s", env);
++	} else if ((env = getenv("XDG_CONFIG_HOME")) != NULL && *env) {
++		snprintf(path, sizeof(path), "%s/st/palette", env);
++	} else if ((env = getenv("HOME")) != NULL && *env) {
++		snprintf(path, sizeof(path), "%s/.config/st/palette", env);
++	} else {
++		return;
++	}
++
++	if ((fp = fopen(path, "r")) == NULL) {
++		if (debug)
++			fprintf(stderr, "xloadpalette: cannot open %s\n", path);
++		return;
++	}
++	if (debug)
++		fprintf(stderr, "xloadpalette: reading %s (collen=%d)\n",
++		        path, dc.collen);
++
++	while (fgets(line, sizeof(line), fp)) {
++		if (line[0] == '#')
++			continue;
++		if ((val = strchr(line, '=')) == NULL)
++			continue;
++		*val++ = '\0';
++
++		for (key = line; *key == ' ' || *key == '\t'; key++)
++			;
++		for (end = key + strlen(key);
++		     end > key && strchr(" \t\r\n", end[-1]) != NULL;)
++			*--end = '\0';
++
++		while (*val == ' ' || *val == '\t')
++			val++;
++		for (end = val + strlen(val);
++		     end > val && strchr(" \t\r\n", end[-1]) != NULL;)
++			*--end = '\0';
++
++		/*
++		 * The '#' is part of the colour, not decoration. XftColorAllocName
++		 * parses a colour-spec, and "#rrggbb" is that form -- a bare
++		 * "rrggbb" is neither a known colour name nor a valid spec, so it
++		 * is rejected outright. st's own colorname[] entries keep the '#'
++		 * for the same reason. Accept the value either way and hand it to
++		 * Xft exactly as written.
++		 */
++		if (val[0] == '#') {
++			hex = val + 1;
++			n = 7;
++		} else {
++			hex = val;
++			n = 6;
++		}
++		if (strlen(val) != (size_t)n ||
++		    strspn(hex, "0123456789abcdefABCDEF") != (size_t)(n - 1))
++			continue;
++
++		if (!strncmp(key, "color", 5) && isdigit((unsigned char)key[5])) {
++			i = atoi(key + 5);
++			if (BETWEEN(i, 0, 15)) {
++				if (xsetcolorname(i, val) && debug)
++					fprintf(stderr, "xloadpalette: color%d %s "
++					        "rejected\n", i, val);
++				ncol++;
++			}
++		} else if (!strcmp(key, "foreground")) {
++			strcpy(fg, val);
++		} else if (!strcmp(key, "background")) {
++			strcpy(bg, val);
++		} else if (!strcmp(key, "cursor")) {
++			strcpy(cs, val);
++		}
++	}
++	fclose(fp);
++
++	if (fg[0])
++		xsetcolorname(defaultfg, fg);
++	if (bg[0])
++		xsetcolorname(defaultbg, bg);
++	if (cs[0])
++		xsetcolorname(defaultcs, cs);
++
++	if (debug)
++		fprintf(stderr, "xloadpalette: applied %d ansi, fg=%d/%s bg=%d/%s "
++		        "cs=%d/%s (indices %u/%u/%u)\n", ncol,
++		        fg[0] != 0, fg[0] ? fg : "-", bg[0] != 0, bg[0] ? bg : "-",
++		        cs[0] != 0, cs[0] ? cs : "-",
++		        defaultfg, defaultbg, defaultcs);
++}
++
++/*
+  * Absolute coordinates.
+  */
+ void
+@@ -1150,6 +1273,7 @@
+ 	/* colors */
+ 	xw.cmap = XDefaultColormap(xw.dpy, xw.scr);
+ 	xloadcols();
++	xloadpalette();
+ 
+ 	/* adjust fixed window geometry */
+ 	win.w = 2 * borderpx + cols * win.cw;
