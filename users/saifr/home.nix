@@ -619,4 +619,27 @@ xclip # (Optional: for tiny copy/paste)
   };
 
   home.file.".config/libreoffice/4/user/registrymodifications.xcu".source = ./registrymodifications.xcu;
+
+  # Follow opencode's light/dark choice onto the rest of the desktop.
+  #
+  # theme.sh already drives opencode when you type `light` or `dark` in a
+  # terminal. This is the other direction: switching mode inside opencode's own
+  # command palette changes kv.json, and this turns that into the same desktop
+  # theme switch. It polls, because opencode has no signal, socket or hook to
+  # subscribe to, and half a second is well inside "instant".
+  #
+  # It runs the full theme.sh rather than just the st part, so the desktop does
+  # not end up half-switched. That is a deliberate widening of "make the
+  # terminals follow": emacs, nautilus, chrome and the icon theme come along
+  # too. Narrow it to the st sweep inside opencode-follow.sh if that is not
+  # wanted.
+  systemd.user.services.opencode-theme-follow = {
+    Unit.Description = "Mirror opencode's light/dark mode onto the desktop theme";
+    Service = {
+      ExecStart = "%h/.config/config-manager/opencode-follow.sh";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
+    Install.WantedBy = [ "default.target" ];
+  };
 }
