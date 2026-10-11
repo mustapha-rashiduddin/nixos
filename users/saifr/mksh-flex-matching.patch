@@ -1,109 +1,41 @@
---- a/edit.c
-+++ b/edit.c
-@@ -114,6 +114,7 @@
- 
- static int path_order_cmp(const void *, const void *);
- static void glob_table(const char *, XPtrV *, struct table *);
-+static void glob_path1(int, const char *, XPtrV *, const char *, bool);
- static void glob_path(int, const char *, XPtrV *, const char *);
- static int x_file_glob(int *, char *, char ***);
- static int x_command_glob(int, char *, char ***);
-@@ -807,7 +808,7 @@
- }
- 
- static void
--glob_path(int flags, const char *pat, XPtrV *wp, const char *lpath)
-+glob_path1(int flags, const char *pat, XPtrV *wp, const char *lpath, bool flex)
- {
- 	const char *sp = lpath, *p;
- 	char *xp, **words;
-@@ -845,7 +846,7 @@
- 
- 		oldsize = XPsize(*wp);
- 		/* mark dirs */
--		glob_str(Xstring(xs, xp), wp, true, true);
-+		glob_str(Xstring(xs, xp), wp, true, true, flex);
- 		newsize = XPsize(*wp);
- 
- 		/* Check that each match is executable... */
-@@ -868,6 +869,23 @@
- 	Xfree(xs, xp);
- }
- 
-+static void
-+glob_path(int flags, const char *pat, XPtrV *wp, const char *lpath)
-+{
-+	size_t oldsize = XPsize(*wp);
-+
-+	/* First the plain (case-insensitive) prefix match over all of $PATH. */
-+	glob_path1(flags, pat, wp, lpath, false);
-+	/*
-+	 * Only if that turned up nothing at all do we retry with flexible
-+	 * matching. Doing it per $PATH element instead would let a fuzzy
-+	 * hit in some unrelated directory hide a real prefix match in
-+	 * another one.
-+	 */
-+	if (XPsize(*wp) == oldsize)
-+		glob_path1(flags, pat, wp, lpath, true);
-+}
-+
- /*
-  * if argument string contains any special characters, they will
-  * be escaped and the result will be put into edit buffer by
 --- a/eval.c
 +++ b/eval.c
-@@ -1734,7 +1734,7 @@
- {
- 	int oldsize = XPsize(*wp);
- 
--	if (glob_str(cp, wp, markdirs, ignorecase) == 0)
-+	if (glob_str(cp, wp, markdirs, ignorecase, true) == 0)
- 		XPput(*wp, debunk(cp, cp, strlen(cp) + 1));
- 	else
- 		qsort(XPptrv(*wp) + oldsize, XPsize(*wp) - oldsize,
-@@ -1749,20 +1749,36 @@
- 
+@@ -1750,18 +1750,31 @@
  /*
   * Apply file globbing to cp and store the matching files in wp. Returns
-- * the number of matches found.
-+ * the number of matches found. If flex is set, and cp matches nothing,
-+ * retry with flexible matching (see gmatch_flexpat()).
+  * the number of matches found.
++ *
++ * When ignorecase is set we are being called from tab completion, and
++ * match flexibly: see gmatch_flexpat(). Flexible matching is not a
++ * fallback but the whole match -- anything the plain prefix pattern would
++ * have found also contains the typed characters in order, so globbing the
++ * flexible pattern returns the prefix matches plus the rest. Falling back
++ * to it only on failure would hide them: "cl" would complete straight to
++ * cli-calculator/ and never offer c-like/, which is equally plausible.
   */
  int
--glob_str(char *cp, XPtrV *wp, bool markdirs, bool ignorecase)
-+glob_str(char *cp, XPtrV *wp, bool markdirs, bool ignorecase, bool flex)
+ glob_str(char *cp, XPtrV *wp, bool markdirs, bool ignorecase)
  {
  	int oldsize = XPsize(*wp);
  	XString xs;
 -	char *xp;
 +	char *xp, *flexpat;
  
++	if (ignorecase && (flexpat = gmatch_flexpat(cp)) != NULL)
++		cp = flexpat;
++	else
++		flexpat = NULL;
  	Xinit(xs, xp, 256, ATEMP);
  	globit(&xs, &xp, cp, wp, (markdirs ? GF_MARKDIR : GF_NONE) |
  	    (ignorecase ? GF_ICASE : GF_NONE));
  	Xfree(xs, xp);
++	afree(flexpat, ATEMP);
  
-+	/*
-+	 * Completion fallback: the typed text is no prefix of any name,
-+	 * so retry with flexible (subsequence) matching, which matches
-+	 * the typed characters anywhere in the name instead -- as long
-+	 * as the shell did not fall back here for a plain expansion.
-+	 */
-+	if (flex && ignorecase && XPsize(*wp) == oldsize &&
-+	    (flexpat = gmatch_flexpat(cp)) != NULL) {
-+		Xinit(xs, xp, 256, ATEMP);
-+		globit(&xs, &xp, flexpat, wp,
-+		    (markdirs ? GF_MARKDIR : GF_NONE) | GF_ICASE);
-+		Xfree(xs, xp);
-+		afree(flexpat, ATEMP);
-+	}
-+
  	return (XPsize(*wp) - oldsize);
  }
- 
 --- a/misc.c
 +++ b/misc.c
-@@ -740,6 +740,79 @@
+@@ -740,6 +740,83 @@
  	return (gmatchx_internal(s, p, isfile, true));
  }
  
@@ -113,8 +45,12 @@
 + * every pattern element, so the pattern matches every name containing
 + * the given characters in the same order, anywhere in the name. This is
 + * the flex matching of emacs' ido mode, textmate's "Go to File", fzf
-+ * and the like, so e.g. "dc*" becomes "*d*c*", which matches
-+ * "dailyMail" and "~/dl/c" alike.
++ * and the like, so e.g. "cl*" becomes "*c*l*", matching both c-like and
++ * cli-calculator.
++ *
++ * The result is a superset of the original pattern -- a name that starts
++ * with the typed text also contains those characters in order -- so this
++ * can replace the plain match rather than merely be a fallback for it.
 + *
 + * Only the last component is rewritten; directory names the user has
 + * already typed are copied over unchanged, which keeps this cheap.
@@ -124,8 +60,8 @@
 + *
 + * Patterns using constructs we do not want to rewrite in place --
 + * bracket expressions "[...]" and extended globs "*(...)" etc. -- are
-+ * rejected: NULL is returned and the caller keeps using the plain
-+ * pattern.
++ * rejected: NULL is returned and the caller keeps the plain pattern.
++ * The result is allocated from ATEMP; afree(NULL) is a no-op.
 + */
 +char *
 +gmatch_flexpat(const char *p)
@@ -185,15 +121,6 @@
   * if it contains no pattern characters or if there is a syntax error.
 --- a/sh.h
 +++ b/sh.h
-@@ -2421,7 +2421,7 @@
- char *debunk(char *, const char *, size_t);
- void expand(const char *, XPtrV *, int);
- void expand_icase(const char *, XPtrV *, int);
--int glob_str(char *, XPtrV *, bool, bool);
-+int glob_str(char *, XPtrV *, bool, bool, bool);
- char *do_tilde(char *);
- /* exec.c */
- int execute(struct op * volatile, volatile int, volatile int * volatile);
 @@ -2646,6 +2646,7 @@
  int getn(const char *, int *);
  int gmatchx(const char *, const char *, bool);
