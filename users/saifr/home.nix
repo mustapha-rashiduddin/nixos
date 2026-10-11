@@ -37,6 +37,10 @@ let
   mkshCaseInsensitive = pkgs.mksh.overrideAttrs (oldAttrs: {
     patches = (oldAttrs.patches or []) ++ [
       ./mksh-case-insensitive-completion.patch
+      # TAB falls back to flexible/subsequence matching ("dc" finds
+      # "Documents") when the plain case-insensitive prefix match finds
+      # nothing; must come after the patch above.
+      ./mksh-flex-matching.patch
     ];
   });
 

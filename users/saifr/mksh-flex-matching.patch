@@ -1,0 +1,204 @@
+--- a/edit.c
++++ b/edit.c
+@@ -114,6 +114,7 @@
+ 
+ static int path_order_cmp(const void *, const void *);
+ static void glob_table(const char *, XPtrV *, struct table *);
++static void glob_path1(int, const char *, XPtrV *, const char *, bool);
+ static void glob_path(int, const char *, XPtrV *, const char *);
+ static int x_file_glob(int *, char *, char ***);
+ static int x_command_glob(int, char *, char ***);
+@@ -807,7 +808,7 @@
+ }
+ 
+ static void
+-glob_path(int flags, const char *pat, XPtrV *wp, const char *lpath)
++glob_path1(int flags, const char *pat, XPtrV *wp, const char *lpath, bool flex)
+ {
+ 	const char *sp = lpath, *p;
+ 	char *xp, **words;
+@@ -845,7 +846,7 @@
+ 
+ 		oldsize = XPsize(*wp);
+ 		/* mark dirs */
+-		glob_str(Xstring(xs, xp), wp, true, true);
++		glob_str(Xstring(xs, xp), wp, true, true, flex);
+ 		newsize = XPsize(*wp);
+ 
+ 		/* Check that each match is executable... */
+@@ -868,6 +869,23 @@
+ 	Xfree(xs, xp);
+ }
+ 
++static void
++glob_path(int flags, const char *pat, XPtrV *wp, const char *lpath)
++{
++	size_t oldsize = XPsize(*wp);
++
++	/* First the plain (case-insensitive) prefix match over all of $PATH. */
++	glob_path1(flags, pat, wp, lpath, false);
++	/*
++	 * Only if that turned up nothing at all do we retry with flexible
++	 * matching. Doing it per $PATH element instead would let a fuzzy
++	 * hit in some unrelated directory hide a real prefix match in
++	 * another one.
++	 */
++	if (XPsize(*wp) == oldsize)
++		glob_path1(flags, pat, wp, lpath, true);
++}
++
+ /*
+  * if argument string contains any special characters, they will
+  * be escaped and the result will be put into edit buffer by
+--- a/eval.c
++++ b/eval.c
+@@ -1734,7 +1734,7 @@
+ {
+ 	int oldsize = XPsize(*wp);
+ 
+-	if (glob_str(cp, wp, markdirs, ignorecase) == 0)
++	if (glob_str(cp, wp, markdirs, ignorecase, true) == 0)
+ 		XPput(*wp, debunk(cp, cp, strlen(cp) + 1));
+ 	else
+ 		qsort(XPptrv(*wp) + oldsize, XPsize(*wp) - oldsize,
+@@ -1749,20 +1749,36 @@
+ 
+ /*
+  * Apply file globbing to cp and store the matching files in wp. Returns
+- * the number of matches found.
++ * the number of matches found. If flex is set, and cp matches nothing,
++ * retry with flexible matching (see gmatch_flexpat()).
+  */
+ int
+-glob_str(char *cp, XPtrV *wp, bool markdirs, bool ignorecase)
++glob_str(char *cp, XPtrV *wp, bool markdirs, bool ignorecase, bool flex)
+ {
+ 	int oldsize = XPsize(*wp);
+ 	XString xs;
+-	char *xp;
++	char *xp, *flexpat;
+ 
+ 	Xinit(xs, xp, 256, ATEMP);
+ 	globit(&xs, &xp, cp, wp, (markdirs ? GF_MARKDIR : GF_NONE) |
+ 	    (ignorecase ? GF_ICASE : GF_NONE));
+ 	Xfree(xs, xp);
+ 
++	/*
++	 * Completion fallback: the typed text is no prefix of any name,
++	 * so retry with flexible (subsequence) matching, which matches
++	 * the typed characters anywhere in the name instead -- as long
++	 * as the shell did not fall back here for a plain expansion.
++	 */
++	if (flex && ignorecase && XPsize(*wp) == oldsize &&
++	    (flexpat = gmatch_flexpat(cp)) != NULL) {
++		Xinit(xs, xp, 256, ATEMP);
++		globit(&xs, &xp, flexpat, wp,
++		    (markdirs ? GF_MARKDIR : GF_NONE) | GF_ICASE);
++		Xfree(xs, xp);
++		afree(flexpat, ATEMP);
++	}
++
+ 	return (XPsize(*wp) - oldsize);
+ }
+ 
+--- a/misc.c
++++ b/misc.c
+@@ -740,6 +740,79 @@
+ 	return (gmatchx_internal(s, p, isfile, true));
+ }
+ 
++/*
++ * Duplicate the MAGIC-encoded glob pattern p, rewriting its last path
++ * component into its "flexible" variant: a '*' is inserted in front of
++ * every pattern element, so the pattern matches every name containing
++ * the given characters in the same order, anywhere in the name. This is
++ * the flex matching of emacs' ido mode, textmate's "Go to File", fzf
++ * and the like, so e.g. "dc*" becomes "*d*c*", which matches
++ * "dailyMail" and "~/dl/c" alike.
++ *
++ * Only the last component is rewritten; directory names the user has
++ * already typed are copied over unchanged, which keeps this cheap.
++ *
++ * '*' and '?' are flexible already and are passed through unchanged;
++ * they just keep their meaning, which is exactly what we want here.
++ *
++ * Patterns using constructs we do not want to rewrite in place --
++ * bracket expressions "[...]" and extended globs "*(...)" etc. -- are
++ * rejected: NULL is returned and the caller keeps using the plain
++ * pattern.
++ */
++char *
++gmatch_flexpat(const char *p)
++{
++	const char *s, *pe, *start;
++	char *r, *d;
++	size_t dirlen;
++
++	pe = strnul(p);
++	for (start = p, s = p; s < pe; s++)
++		if (mksh_cdirsep(*s))
++			start = s + 1;
++	dirlen = start - p;
++	/* worst case: a MAGIC-prefixed '*' per byte of input */
++	d = r = alloc((pe - p) * 2 + 3, ATEMP);
++	memcpy(d, p, dirlen);
++	d += dirlen;
++	for (s = start; s < pe; s++) {
++		if (!ISMAGIC(*s)) {
++			/* plain literal: allow anything in front of it */
++			*d++ = MAGIC;
++			*d++ = '*';
++			*d++ = *s;
++			continue;
++		}
++		{
++			unsigned char c = *++s;
++
++			/* MAGIC + NUL cannot happen */
++			if (!c)
++				break;
++			/* extended globs (0x80 bit) and [...] */
++			if ((c & 0x80) || ord(c) == ORD('[')) {
++				afree(r, ATEMP);
++				return (NULL);
++			}
++			/* '*' and '?' are already flexible */
++			if (ord(c) == ORD('*') || ord(c) == ORD('?')) {
++				*d++ = MAGIC;
++				*d++ = c;
++				continue;
++			}
++			/* escaped literal, e.g. "-" in "foo-*" */
++			*d++ = MAGIC;
++			*d++ = '*';
++			*d++ = MAGIC;
++			*d++ = c;
++		}
++	}
++	*d = '\0';
++
++	return (r);
++}
++
+ /**
+  * Returns if p is a syntacticly correct globbing pattern, false
+  * if it contains no pattern characters or if there is a syntax error.
+--- a/sh.h
++++ b/sh.h
+@@ -2421,7 +2421,7 @@
+ char *debunk(char *, const char *, size_t);
+ void expand(const char *, XPtrV *, int);
+ void expand_icase(const char *, XPtrV *, int);
+-int glob_str(char *, XPtrV *, bool, bool);
++int glob_str(char *, XPtrV *, bool, bool, bool);
+ char *do_tilde(char *);
+ /* exec.c */
+ int execute(struct op * volatile, volatile int, volatile int * volatile);
+@@ -2646,6 +2646,7 @@
+ int getn(const char *, int *);
+ int gmatchx(const char *, const char *, bool);
+ int gmatchx_icase(const char *, const char *, bool);
++char *gmatch_flexpat(const char *);
+ bool has_globbing(const char *) MKSH_A_PURE;
+ int ascstrcmp(const void *, const void *) MKSH_A_PURE;
+ int ascpstrcmp(const void *, const void *) MKSH_A_PURE;
