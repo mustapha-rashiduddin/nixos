@@ -121,6 +121,44 @@
  	nlen = x_longest_prefix(nwords, words, true);
  	if (nwords == 1) {
  		/*
+@@ -2821,20 +2912,33 @@
+ 		completed = true;
+ 	} else {
+ 		char *unescaped;
++		size_t ulen;
+ 
+ 		/* make a copy of the original string part */
+ 		strndupx(unescaped, xbuf + start, olen, ATEMP);
+ 
+ 		/* expand any tilde and unescape the string for comparison */
+ 		unescaped = x_glob_hlp_tilde_and_rem_qchar(unescaped, true);
++		ulen = strlen(unescaped);
+ 
+ 		/*
+ 		 * match iff entire original string is part of the
+-		 * longest prefix, implying the latter is at least
+-		 * the same size (after unescaping)
++		 * longest prefix
++		 */
++		completed = x_prefix_equal(words[0], unescaped, ulen, true);
++
++		/*
++		 * ... but only complete when doing so cannot shorten what
++		 * was typed. Every match starting with the word used to
++		 * imply the longest common prefix was at least as long,
++		 * which flexible matching breaks: with cli-calculator/ and
++		 * c-like/ to choose from, "cl" has a common prefix of just
++		 * "c", and inserting that would eat the l. Note that a
++		 * longer common prefix is still fine, and desirable -- it
++		 * is what narrows "ab" to "abc" for a pair of matches.
+ 		 */
+-		completed = x_prefix_equal(words[0], unescaped,
+-		    strlen(unescaped), true);
++		if (completed && nlen < (int)ulen)
++			completed = false;
+ 
+ 		afree(unescaped, ATEMP);
+ 	}
 --- a/eval.c
 +++ b/eval.c
 @@ -1750,18 +1750,31 @@
