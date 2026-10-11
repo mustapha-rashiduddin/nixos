@@ -1,3 +1,126 @@
+--- a/edit.c
++++ b/edit.c
+@@ -118,6 +118,8 @@
+ static int x_file_glob(int *, char *, char ***);
+ static int x_command_glob(int, char *, char ***);
+ static int x_locate_word(const char *, int, int, int *, bool *);
++static bool x_flex_rank(int, char **, const char *, size_t);
++static bool x_flex_clear_winner(int, char **, const char *, size_t);
+ 
+ static int x_e_getmbc(char *);
+ 
+@@ -2785,6 +2787,87 @@
+ 	return (KSTD);
+ }
+ 
++/*-
++ * Order completion candidates by how closely they match the literal text
++ * that was typed, best first, so the one the user means sits at the top of
++ * a list and do_complete() can tell a clear winner from a near tie.
++ *
++ * Only plain literal words can be ranked: a wildcard, a parameter
++ * substitution or a backslash escape has no single sensible "typed text"
++ * to score against. Returns false then, leaving the candidates in their
++ * existing (alphabetical) order.
++ */
++static bool
++x_flex_rank(int nwords, char **words, const char *query, size_t qlen)
++{
++	int *scores;
++	char **order;
++	int i, j;
++	const char *base;
++
++	if (nwords < 2 || qlen == 0)
++		return (false);
++	for (i = 0; i < (int)qlen; i++) {
++		unsigned char c = (unsigned char)query[i];
++
++		if (c == '\\' || mksh_cdirsep(c) ||
++		    ord(c) == ORD('*') || ord(c) == ORD('?') ||
++		    ord(c) == ORD('[') || ord(c) == ORD('$'))
++			return (false);
++	}
++	scores = alloc2(nwords, sizeof(*scores), ATEMP);
++	order = alloc2(nwords, sizeof(*order), ATEMP);
++	for (i = 0; i < nwords; i++) {
++		/*
++		 * Score the basename: any directory part is common to all
++		 * candidates, and x_basename() skips the trailing slash
++		 * that a directory match carries.
++		 */
++		base = words[i] + x_basename(words[i], NULL);
++		order[i] = words[i];
++		scores[i] = flex_score(base, query, qlen);
++	}
++	/* insertion sort: nwords is bounded by one directory listing */
++	for (i = 1; i < nwords; i++) {
++		char *w = order[i];
++		int sc = scores[i];
++
++		for (j = i; j > 0 && scores[j - 1] > sc; j--) {
++			order[j] = order[j - 1];
++			scores[j] = scores[j - 1];
++		}
++		order[j] = w;
++		scores[j] = sc;
++	}
++	for (i = 0; i < nwords; i++)
++		words[i] = order[i];
++	afree(scores, ATEMP);
++	afree(order, ATEMP);
++
++	return (true);
++}
++
++/*-
++ * Is the best candidate so far ahead of the runner-up that it can be
++ * completed on its own? The slack in FLEX_WINNER keeps near ties as a
++ * list -- cli-calculator against c-like on "cl" differ by a single hole --
++ * while a real gap completes outright, as rustlings does over learn-rust
++ * on "ru", whose match starts fifteen characters further in.
++ */
++static bool
++x_flex_clear_winner(int nwords, char **words, const char *query, size_t qlen)
++{
++	const char *a, *b;
++
++	if (nwords < 2)
++		return (true);
++	a = words[0] + x_basename(words[0], NULL);
++	b = words[1] + x_basename(words[1], NULL);
++
++	return (flex_score(b, query, qlen) - flex_score(a, query, qlen) >=
++	    FLEX_WINNER);
++}
++
+ static void
+ do_complete(
+     /* XCF_{COMMAND,FILE,COMMAND_FILE} */
+@@ -2803,6 +2886,15 @@
+ 		x_e_putc2(KSH_BEL);
+ 		return;
+ 	}
++	olen = end - start;
++	/*
++	 * Put the closest match first, then -- if it is clearly ahead of
++	 * the runner-up -- act as though it were the only match, so TAB
++	 * completes it instead of offering the alternatives.
++	 */
++	if (x_flex_rank(nwords, words, xbuf + start, olen) &&
++	    x_flex_clear_winner(nwords, words, xbuf + start, olen))
++		nwords = 1;
+ 	if (type == CT_LIST) {
+ 		x_print_expansions(nwords, words,
+ 		    tobool(flags & XCF_IS_COMMAND));
+@@ -2810,7 +2902,6 @@
+ 		x_free_words(nwords, words);
+ 		return;
+ 	}
+-	olen = end - start;
+ 	nlen = x_longest_prefix(nwords, words, true);
+ 	if (nwords == 1) {
+ 		/*
 --- a/eval.c
 +++ b/eval.c
 @@ -1750,18 +1750,31 @@
@@ -35,7 +158,7 @@
  }
 --- a/misc.c
 +++ b/misc.c
-@@ -740,6 +740,83 @@
+@@ -740,6 +740,124 @@
  	return (gmatchx_internal(s, p, isfile, true));
  }
  
@@ -116,16 +239,64 @@
 +	return (r);
 +}
 +
++/*
++ * Rate how well name matches the literal text query, lowest is best.
++ *
++ * Flexible matching answers "does it match?", which on its own cannot tell
++ * a candidate the user obviously meant from one that merely happens to
++ * contain the letters. Ranking can: where the match starts dominates, and
++ * holes in it count for little. So on "ru", rustlings (match at offset 0)
++ * beats learn-rust (offset 3) and Personal_AI_Infrastructure (offset 2,
++ * fifteen holes); on "cl", cli-calculator and c-like land within a point
++ * of each other, which is what marks them as too close to call.
++ *
++ * Returns FLEX_NOMATCH if name does not contain query at all.
++ */
++int
++flex_score(const char *name, const char *query, size_t qlen)
++{
++	const char *s = name, *hit;
++	size_t i, off, pos = 0, last = 0, holes = 0;
++	bool seen = false;
++
++	for (i = 0; i < qlen; i++) {
++		for (hit = s; *hit; hit++)
++			if (gmatch_same((unsigned char)*hit,
++			    (unsigned char)query[i], true))
++				break;
++		if (!*hit)
++			return (FLEX_NOMATCH);
++		off = hit - name;
++		if (!seen) {
++			pos = off;
++			last = off;
++			seen = true;
++		} else
++			holes += off - last - 1;
++		last = off;
++		s = hit + 1;
++	}
++
++	return ((int)(pos * FLEX_POS_W) + (int)holes);
++}
++
  /**
   * Returns if p is a syntacticly correct globbing pattern, false
   * if it contains no pattern characters or if there is a syntax error.
 --- a/sh.h
 +++ b/sh.h
-@@ -2646,6 +2646,7 @@
+@@ -2646,6 +2646,14 @@
  int getn(const char *, int *);
  int gmatchx(const char *, const char *, bool);
  int gmatchx_icase(const char *, const char *, bool);
 +char *gmatch_flexpat(const char *);
++int flex_score(const char *, const char *, size_t);
++/* how heavily flex_score() weighs where the match starts, vs holes in it */
++#define FLEX_POS_W	8
++/* returned by flex_score() for a name that does not match at all */
++#define FLEX_NOMATCH	99999
++/* score gap needed before the best candidate is auto-completed alone */
++#define FLEX_WINNER	4
  bool has_globbing(const char *) MKSH_A_PURE;
  int ascstrcmp(const void *, const void *) MKSH_A_PURE;
  int ascpstrcmp(const void *, const void *) MKSH_A_PURE;
