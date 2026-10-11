@@ -97,23 +97,43 @@
  static void
  do_complete(
      /* XCF_{COMMAND,FILE,COMMAND_FILE} */
-@@ -2803,6 +2886,15 @@
+@@ -2793,7 +2876,9 @@
+     Comp_type type)
+ {
+ 	char **words;
++	const char *fq;		/* word to rank against: its last component */
+ 	int start, end, nlen, olen, nwords;
++	size_t fn;
+ 	bool completed;
+ 
+ 	nwords = x_cf_glob(&flags, xbuf, xep - xbuf, xcp - xbuf,
+@@ -2803,6 +2888,25 @@
  		x_e_putc2(KSH_BEL);
  		return;
  	}
 +	olen = end - start;
 +	/*
++	 * Rank on the last path component only. Both sides are basenames:
++	 * the candidates below are scored that way, and the directory part
++	 * of the word is common to every candidate, so scoring it would say
++	 * nothing about which match is better. Splitting it off here rather
++	 * than refusing to rank is what lets "rnd/ru" narrow the same way
++	 * "ru" does.
++	 */
++	fq = xbuf + start + x_basename(xbuf + start, xbuf + end);
++	fn = (xbuf + end) - fq;
++	/*
 +	 * Put the closest match first, then -- if it is clearly ahead of
 +	 * the runner-up -- act as though it were the only match, so TAB
 +	 * completes it instead of offering the alternatives.
 +	 */
-+	if (x_flex_rank(nwords, words, xbuf + start, olen) &&
-+	    x_flex_clear_winner(nwords, words, xbuf + start, olen))
++	if (x_flex_rank(nwords, words, fq, fn) &&
++	    x_flex_clear_winner(nwords, words, fq, fn))
 +		nwords = 1;
  	if (type == CT_LIST) {
  		x_print_expansions(nwords, words,
  		    tobool(flags & XCF_IS_COMMAND));
-@@ -2810,7 +2902,6 @@
+@@ -2810,7 +2914,6 @@
  		x_free_words(nwords, words);
  		return;
  	}
@@ -121,7 +141,7 @@
  	nlen = x_longest_prefix(nwords, words, true);
  	if (nwords == 1) {
  		/*
-@@ -2821,20 +2912,33 @@
+@@ -2821,20 +2924,33 @@
  		completed = true;
  	} else {
  		char *unescaped;
