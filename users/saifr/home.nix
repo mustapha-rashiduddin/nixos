@@ -187,6 +187,10 @@ xclip # (Optional: for tiny copy/paste)
     # TIOCSTI is disabled on this box, so XTEST is the only way to put
     # keystrokes into a running TUI.
     xdotool
+    # Compositor, started from ~/.config/i3/config. Without it every X client
+    # memcpys into the front buffer untied to vblank, so workspace switches
+    # tear. Backed by the i915/glamor GL, hence glx over xrender.
+    picom
     libreoffice-fresh
     llvmPackages.libcxx
 
@@ -649,6 +653,41 @@ xclip # (Optional: for tiny copy/paste)
       ExecStart = "%h/.config/config-manager/opencode-follow.sh";
       Restart = "on-failure";
       RestartSec = 2;
+
+      # PATH has to be stated here. A systemd user unit does not inherit the
+      # login session's PATH -- it gets the user manager's environment, and
+      # when that has no PATH of its own systemd falls back to its own bin
+      # directory and nothing else. The script then cannot find `sleep`, so
+      # the poll delay at the bottom of its loop fails, and a shell loop whose
+      # sleep failed is not a slow loop: it spins flat out. Measured on a live
+      # boot with the PATH missing, that was 33% of a core plus two journal
+      # lines per iteration, which is 1.6M lines and 3.9G of journal in the
+      # first half hour.
+      #
+      # Listing it here also stops this from depending on what the manager
+      # happens to hold, which is the part that actually broke once already.
+      #
+      # python3 is the one that cannot be left implicit. theme.sh repaints
+      # every st window with st-theme.py, but writes current-st-theme on the
+      # line *after* it and never checks whether it worked, so a missing
+      # python3 does not look like a failure: the follower records the switch
+      # as done, finds kv.json and current-st-theme agreeing, and never
+      # retries. The desktop then quietly keeps the old theme while everything
+      # reports success. sqlite3 is the same shape of dependency, for the
+      # emacs speed-dial; emacsclient and xdotool are not in any store profile
+      # at all -- useUserPackages puts them in the per-user profile.
+      Environment = [ "PATH=${pkgs.lib.makeBinPath [
+          pkgs.coreutils
+          pkgs.gnused
+          pkgs.gnugrep
+          pkgs.util-linux
+          pkgs.procps
+          pkgs.dconf
+          pkgs.glib
+          pkgs.python3
+          pkgs.sqlite
+        ]
+      }:/run/current-system/sw/bin:/etc/profiles/per-user/${config.home.username}/bin:${config.home.homeDirectory}/.nix-profile/bin" ];
     };
     Install.WantedBy = [ "default.target" ];
   };
