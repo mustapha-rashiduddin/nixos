@@ -461,6 +461,30 @@ in
     # only stops it happening to a machine that is booted without the tunnel.
     autoStart = false;
   };
+
+  # Bound the openvpn-nordvpn restart loop.
+  #
+  # services/networking/openvpn.nix:79 sets Restart = "always" unconditionally
+  # and offers no option to change it, so an instance that cannot authenticate
+  # never gives up -- it retries every few seconds for as long as the machine is
+  # up. With bad credentials that produced 92 attempts in a boot, ~700K journal
+  # lines a day, each one a full TLS handshake before the failure. It costs no
+  # meaningful CPU, so this is not a performance fix. It is here because the
+  # failure mode is silent and unbounded: a credential or cert that goes stale
+  # while the machine is unattended logs for days and nobody notices.
+  #
+  # Start rate limiting is systemd's own mechanism for exactly this, and it is
+  # the right layer rather than overriding Restart, because it keeps retrying
+  # for the failure that actually resolves itself -- a flaky network, a laptop
+  # waking on a different access point -- while refusing to spin on the failure
+  # that does not, which is bad credentials. Three starts an hour, five minutes
+  # apart: a transient drop recovers on its own, a rejected password exhausts
+  # the budget in ten minutes and then waits for you.
+  systemd.services.openvpn-nordvpn = {
+    serviceConfig.RestartSec = 300;
+    startLimitIntervalSec = 3600;
+    startLimitBurst = 3;
+  };
   services.avahi = {
     enable = true;
     nssmdns4 = true;
