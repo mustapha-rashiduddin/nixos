@@ -441,7 +441,25 @@ in
   services.openvpn.servers.nordvpn = {
     config = "config /home/saifr/vpn/dk244.ovpn";
     authUserPass = "/etc/openvpn/creds";
-    autoStart = true;
+
+    # Dormant by default -- start it by hand when you actually want the tunnel.
+    #
+    # The module hardcodes Restart = "always" (services/networking/openvpn.nix,
+    # line 79), and it is not exposed as an option, so an instance that cannot
+    # authenticate does not fail once and stop: it retries forever, about every
+    # 3 seconds. These credentials are currently rejected (AUTH_FAILED), which
+    # turned that into 92 connection attempts and ~700K journal lines a day,
+    # each attempt logging a full TLS handshake before giving up. None of it
+    # cost meaningful CPU, but it is unbounded and it buries everything else in
+    # the journal.
+    #
+    # autoStart = false drops the unit from multi-user.target entirely rather
+    # than just not starting it, so it cannot be re-enabled by accident:
+    #   sudo systemctl start openvpn-nordvpn
+    #
+    # Note that fixing the credentials is the real fix for the log volume. This
+    # only stops it happening to a machine that is booted without the tunnel.
+    autoStart = false;
   };
   services.avahi = {
     enable = true;
