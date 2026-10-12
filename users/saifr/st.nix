@@ -82,11 +82,25 @@ pkgs.st.overrideAttrs (oldAttrs: {
       hash = "sha256-8oVLgbsYCfMhNEOGadb5DFajdDKPxwgf3P/4vOXfUFo=";
     })
     ./st-selection-autoscroll.diff
+    # Report an unimplemented DEC private mode once per session, not once per
+    # frame. st's own diagnostic for this is unbounded: an app that re-sends a
+    # mode it knows st will not honour gets one stderr line per occurrence for
+    # as long as the window is open. opencode 1.18.33 sends CSI ? 2026/2027/2031
+    # h and l from its render loop, so this cost ~50 lines/sec -- 4.3M lines a
+    # day, each ~1.2K of journal metadata wrapped around 52 bytes of message,
+    # about 5GB/day, every line identical. Bounded by distinct modes instead,
+    # which keeps the diagnostic that says an app wants something we do not do.
+    ./st-quiet-modes.diff
     # fix_keyboard_input: CSI u (kitty/fixterms) keyboard protocol support
     # Enables Ctrl+Alt+h and other modified key combinations to be distinguished
     (pkgs.fetchpatch {
       url = "https://st.suckless.org/patches/fix_keyboard_input/st-fix-keyboard-input-20180605-dc3b5ba.diff";
-      hash = "sha256-cpO+bVbmRVYEBjC6ii5o7ZdmTnDOxMJxTa4VqwEO2vo=";
+      # The pinned hash had gone stale: suckless serves different bytes for
+      # this URL than when it was first added, so the fixed-output derivation
+      # failed with a hash mismatch and took the whole st build down with it.
+      # Independent of st-quiet-modes.diff -- it reproduces with stock st
+      # patches -- but nothing could be rebuilt until this was corrected.
+      hash = "sha256-h5ZrCj4IrkMQanLSMmgXaRd7qZYqvbzqUnuFt/axsMI=";
     })
     # Read the active palette at startup, so a new window is born in the current
     # theme instead of flashing from the compiled-in colours first.

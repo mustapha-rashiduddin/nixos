@@ -1,0 +1,73 @@
+--- a/st.c
++++ b/st.c
+@@ -1472,6 +1472,40 @@
+ 	term.bot = b;
+ }
+ 
++/* Modes asked for that we do not implement, that we have already complained
++ * about. See the default case in tsetmode() for why this is tracked. */
++static struct unseen_mode {
++	int mode;
++	struct unseen_mode *next;
++} *unseen_modes;
++
++/* Whether a diagnostic has already been printed for this mode. The list is
++ * walked once per complaint rather than once per byte, and holds only the
++ * handful of distinct modes an app has asked about, so this is negligible
++ * next to the handling it guards. */
++static int
++already_seen(int mode)
++{
++	struct unseen_mode *m;
++
++	for (m = unseen_modes; m; m = m->next)
++		if (m->mode == mode)
++			return 1;
++	return 0;
++}
++
++static void
++remember(int mode)
++{
++	struct unseen_mode *m = malloc(sizeof *m);
++
++	if (!m)
++		return;
++	m->mode = mode;
++	m->next = unseen_modes;
++	unseen_modes = m;
++}
++
+ void
+ tsetmode(int priv, int set, const int *args, int narg)
+ {
+@@ -1571,9 +1605,26 @@
+ 				      codes. */
+ 				break;
+ 			default:
+-				fprintf(stderr,
+-					"erresc: unknown private set/reset mode %d\n",
+-					*args);
++				/* An unknown mode is not an error. A terminal that does
++				 * not implement one is expected to ignore it, which is
++				 * what the break below does, so the only thing an
++				 * unconditional diagnostic added was volume. opencode
++				 * 1.18.33 sends CSI ? 2026/2027/2031 h and l from its
++				 * render loop, so this fired ~50 times a second: 4.3M
++				 * lines a day, each carrying ~1.2K of journal metadata
++				 * for 52 bytes of message, roughly 5GB/day of journal
++				 * growth, every line identical. Report each distinct
++				 * mode once per session instead -- that keeps the
++				 * diagnostic, which is how you find out an app wants
++				 * something you do not do, and bounds the cost by the
++				 * number of modes asked for rather than by how long the
++				 * terminal stays open. */
++				if (!already_seen(*args)) {
++					fprintf(stderr,
++						"erresc: unknown private set/reset mode %d\n",
++						*args);
++					remember(*args);
++				}
+ 				break;
+ 			}
+ 		} else {
